@@ -1,0 +1,488 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>修真 · prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Ma+Shan+Zheng&family=Noto+Sans+SC:wght@300;400;500;700&family=Noto+Serif+SC:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   修真 — Ink & Jade design system
+   This file doubles as the visual spec for the Compose theme.
+   ============================================================ */
+:root{
+  /* DARK · 水墨 ink-wash (default) */
+  --bg:#141109;
+  --bg-2:#1b160d;
+  --surface:#221c12;
+  --surface-2:#2b2417;
+  --line:#3a3120;
+  --ink:#ece1c8;          /* primary text */
+  --ink-soft:#b8ac8e;     /* secondary text */
+  --ink-faint:#7c7257;    /* tertiary / known-word dim */
+  --cinnabar:#d96a52;     /* primary accent · 朱砂 */
+  --cinnabar-deep:#b8442f;
+  --gold:#d8b46b;         /* 鎏金 */
+  --jade:#7fae90;         /* mastered / success · 青翠 */
+  --jade-deep:#4f7a64;
+  --shadow:rgba(0,0,0,.5);
+  --grain:.05;
+  --serif:"Noto Serif SC",serif;
+  --sans:"Noto Sans SC",sans-serif;
+  --display:"Cormorant Garamond",serif;
+  --brush:"Ma Shan Zheng",cursive;
+}
+.light{
+  --bg:#e7dcc4;
+  --bg-2:#efe6d2;
+  --surface:#f6efdd;
+  --surface-2:#fbf6e9;
+  --line:#d8cba9;
+  --ink:#2b2419;
+  --ink-soft:#6c6049;
+  --ink-faint:#a99c7d;
+  --cinnabar:#b43f2c;
+  --cinnabar-deep:#9a3322;
+  --gold:#a9812f;
+  --jade:#4f7a64;
+  --jade-deep:#3c6650;
+  --shadow:rgba(80,60,30,.18);
+  --grain:.04;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{
+  background:
+    radial-gradient(120% 80% at 80% -10%, rgba(216,180,107,.10), transparent 60%),
+    radial-gradient(90% 70% at -10% 110%, rgba(217,106,82,.08), transparent 55%),
+    var(--bg);
+  color:var(--ink);
+  font-family:var(--sans);
+  display:flex;align-items:center;justify-content:center;
+  min-height:100%;
+  padding:32px 16px;
+  transition:background .5s ease,color .3s ease;
+}
+/* paper grain overlay */
+body::after{
+  content:"";position:fixed;inset:0;pointer-events:none;z-index:9999;
+  opacity:var(--grain);mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+}
+
+/* ---------- phone frame ---------- */
+.shell{
+  width:392px;max-width:100%;
+  height:812px;max-height:92vh;
+  background:var(--bg-2);
+  border-radius:42px;
+  box-shadow:0 40px 120px var(--shadow), 0 0 0 1px var(--line), inset 0 0 0 8px var(--bg);
+  position:relative;overflow:hidden;
+  display:flex;flex-direction:column;
+}
+.statusbar{display:flex;justify-content:space-between;align-items:center;
+  padding:16px 26px 6px;font-size:12px;color:var(--ink-soft);letter-spacing:.04em;font-weight:500}
+.statusbar .dot{width:6px;height:6px;border-radius:50%;background:var(--jade);display:inline-block;margin-left:5px}
+
+/* ---------- screens ---------- */
+.screens{flex:1;position:relative;overflow:hidden}
+.screen{position:absolute;inset:0;overflow-y:auto;padding:6px 22px 110px;opacity:0;transform:translateY(8px);
+  pointer-events:none;transition:opacity .4s ease,transform .4s ease}
+.screen.active{opacity:1;transform:none;pointer-events:auto}
+.screen::-webkit-scrollbar{width:0}
+
+h-eyebrow,.eyebrow{display:block;font-family:var(--display);font-style:italic;font-size:15px;
+  color:var(--gold);letter-spacing:.06em;margin-bottom:2px}
+.title{font-family:var(--serif);font-weight:600;font-size:26px;line-height:1.1;margin-bottom:18px}
+.cn{font-family:var(--serif)}
+
+/* ---------- TODAY ---------- */
+.hero{
+  position:relative;border-radius:26px;overflow:hidden;
+  padding:26px 24px 30px;margin:6px 0 18px;
+  background:linear-gradient(155deg,var(--surface-2),var(--surface));
+  border:1px solid var(--line);
+  box-shadow:0 18px 40px -24px var(--shadow);
+}
+.hero .mtn{position:absolute;left:0;right:0;bottom:0;height:90px;opacity:.5}
+.hero .seal{position:absolute;top:20px;right:22px;width:46px;height:46px;border-radius:9px;
+  border:2px solid var(--cinnabar);color:var(--cinnabar);display:grid;place-items:center;
+  font-family:var(--brush);font-size:30px;line-height:1;transform:rotate(-3deg);
+  box-shadow:0 0 0 3px color-mix(in srgb,var(--cinnabar) 12%,transparent)}
+.ck-label{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-soft)}
+.ck-num{font-family:var(--display);font-weight:600;font-size:74px;line-height:.9;margin:2px 0 2px;
+  background:linear-gradient(180deg,var(--ink),var(--gold));-webkit-background-clip:text;background-clip:text;color:transparent}
+.ck-sub{font-size:13px;color:var(--ink-soft)}
+.ck-bar{height:7px;border-radius:6px;background:var(--bg);margin:16px 0 0;overflow:hidden;position:relative;z-index:2}
+.ck-bar i{display:block;height:100%;width:42%;border-radius:6px;
+  background:linear-gradient(90deg,var(--jade-deep),var(--jade))}
+
+.row{display:flex;gap:13px;margin-bottom:14px}
+.card{flex:1;background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:16px 16px 15px;
+  position:relative;overflow:hidden;cursor:pointer;transition:transform .2s ease,border-color .2s ease}
+.card:active{transform:scale(.98)}
+.card:hover{border-color:color-mix(in srgb,var(--gold) 50%,var(--line))}
+.card .k{font-size:12px;color:var(--ink-soft);letter-spacing:.04em;margin-bottom:8px;display:flex;align-items:center;gap:7px}
+.card .big{font-family:var(--display);font-size:38px;font-weight:600;line-height:1}
+.card .big small{font-size:15px;color:var(--ink-soft);font-family:var(--sans);margin-left:4px}
+.pill{display:inline-block;font-size:11px;padding:3px 9px;border-radius:20px;font-weight:500}
+.pill.cin{background:color-mix(in srgb,var(--cinnabar) 16%,transparent);color:var(--cinnabar)}
+.pill.jade{background:color-mix(in srgb,var(--jade) 16%,transparent);color:var(--jade)}
+.ic{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.6}
+
+.section-h{display:flex;align-items:baseline;justify-content:space-between;margin:22px 2px 12px}
+.section-h b{font-family:var(--serif);font-weight:600;font-size:17px}
+.section-h span{font-size:12px;color:var(--gold);font-family:var(--display);font-style:italic;font-size:14px}
+
+.novel{display:flex;gap:15px;align-items:center;background:var(--surface);border:1px solid var(--line);
+  border-radius:20px;padding:13px;cursor:pointer;transition:transform .2s ease}
+.novel:active{transform:scale(.99)}
+.cover{width:58px;height:80px;border-radius:10px;flex:none;position:relative;overflow:hidden;
+  background:linear-gradient(160deg,var(--cinnabar-deep),#3a1f16);box-shadow:0 8px 18px -8px var(--shadow);
+  display:grid;place-items:center}
+.cover .t{font-family:var(--brush);color:#f4e4c4;font-size:30px;writing-mode:vertical-rl;letter-spacing:2px;text-shadow:0 1px 4px rgba(0,0,0,.4)}
+.cover::after{content:"";position:absolute;inset:0;background:radial-gradient(circle at 70% 20%,rgba(255,255,255,.18),transparent 60%)}
+.novel .meta{flex:1;min-width:0}
+.novel .meta .nm{font-family:var(--serif);font-weight:600;font-size:16px;margin-bottom:3px}
+.novel .meta .au{font-size:12px;color:var(--ink-soft);margin-bottom:9px}
+.cov-line{height:5px;border-radius:5px;background:var(--bg);overflow:hidden}
+.cov-line i{display:block;height:100%;border-radius:5px}
+.cov-tag{font-size:11px;color:var(--ink-soft);margin-top:6px;display:flex;justify-content:space-between}
+
+/* ---------- READER ---------- */
+.reader-top{display:flex;align-items:center;justify-content:space-between;padding:8px 0 4px;margin-bottom:6px}
+.reader-top .ch{font-family:var(--display);font-style:italic;color:var(--gold);font-size:15px}
+.reader-cov{height:4px;background:var(--bg);border-radius:4px;margin:0 0 22px;overflow:hidden}
+.reader-cov i{display:block;height:100%;width:88%;background:linear-gradient(90deg,var(--jade-deep),var(--jade))}
+.reader-title{font-family:var(--serif);font-weight:700;font-size:23px;margin-bottom:3px}
+.reader-sub{font-size:13px;color:var(--ink-soft);margin-bottom:24px}
+.prose{font-family:var(--serif);font-size:21px;line-height:2.15;letter-spacing:.01em}
+.prose p{margin-bottom:20px}
+.w{cursor:pointer;border-radius:4px;padding:0 1px;transition:background .15s ease,color .15s ease}
+.w.unknown{color:var(--ink);text-decoration:underline;text-decoration-color:color-mix(in srgb,var(--cinnabar) 55%,transparent);
+  text-underline-offset:6px;text-decoration-thickness:2px}
+.w.known{color:var(--ink-faint)}
+.w:active,.w.sel{background:color-mix(in srgb,var(--gold) 26%,transparent);color:var(--ink)}
+
+/* pop-up dictionary sheet */
+.sheet-scrim{position:absolute;inset:0;background:rgba(0,0,0,.45);opacity:0;pointer-events:none;transition:opacity .3s ease;z-index:40}
+.sheet-scrim.show{opacity:1;pointer-events:auto}
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:50;background:var(--surface-2);
+  border-radius:26px 26px 0 0;border-top:1px solid var(--line);padding:20px 22px 26px;
+  transform:translateY(110%);transition:transform .35s cubic-bezier(.2,.8,.2,1);box-shadow:0 -20px 50px -20px var(--shadow)}
+.sheet.show{transform:none}
+.sheet .grip{width:38px;height:4px;border-radius:4px;background:var(--line);margin:0 auto 16px}
+.sheet .hz{font-family:var(--serif);font-size:40px;font-weight:600;line-height:1;display:flex;align-items:flex-end;gap:12px}
+.sheet .py{font-family:var(--display);font-style:italic;font-size:20px;color:var(--gold)}
+.sheet .play{margin-left:auto;width:40px;height:40px;border-radius:50%;border:1px solid var(--line);
+  background:var(--surface);display:grid;place-items:center;color:var(--cinnabar)}
+.sheet .def{margin:15px 0 4px;font-size:15px;line-height:1.55;color:var(--ink)}
+.sheet .tags{display:flex;gap:8px;margin:14px 0 18px;flex-wrap:wrap}
+.sheet .tag{font-size:11px;padding:4px 10px;border-radius:20px;border:1px solid var(--line);color:var(--ink-soft)}
+.sheet .actions{display:flex;gap:10px}
+.btn{flex:1;border:none;border-radius:14px;padding:14px;font-family:var(--sans);font-size:14px;font-weight:600;
+  cursor:pointer;letter-spacing:.02em;transition:transform .15s ease,filter .2s ease}
+.btn:active{transform:scale(.97)}
+.btn.primary{background:linear-gradient(135deg,var(--cinnabar),var(--cinnabar-deep));color:#fff}
+.btn.ghost{background:var(--surface);color:var(--ink);border:1px solid var(--line)}
+
+/* ---------- REVIEW ---------- */
+.rev-wrap{display:flex;flex-direction:column;height:100%;padding-top:8px}
+.rev-prog{display:flex;align-items:center;gap:10px;margin-bottom:26px}
+.rev-prog .t{font-size:12px;color:var(--ink-soft);white-space:nowrap}
+.rev-prog .b{flex:1;height:6px;border-radius:6px;background:var(--bg);overflow:hidden}
+.rev-prog .b i{display:block;height:100%;width:34%;background:linear-gradient(90deg,var(--gold),var(--cinnabar))}
+.flash{flex:1;border-radius:26px;background:linear-gradient(160deg,var(--surface-2),var(--surface));
+  border:1px solid var(--line);display:flex;flex-direction:column;align-items:center;justify-content:center;
+  text-align:center;padding:34px;cursor:pointer;position:relative;overflow:hidden;box-shadow:0 20px 50px -30px var(--shadow)}
+.flash .seal-bg{position:absolute;font-family:var(--brush);font-size:280px;color:var(--ink);opacity:.04;line-height:1;user-select:none}
+.flash .face-hz{font-family:var(--serif);font-size:96px;font-weight:600;line-height:1;position:relative}
+.flash .hint{position:absolute;bottom:22px;font-size:12px;color:var(--ink-faint);letter-spacing:.1em}
+.flash .back{position:relative}
+.flash .back .py{font-family:var(--display);font-style:italic;font-size:26px;color:var(--gold);margin:14px 0 10px}
+.flash .back .df{font-size:18px;color:var(--ink);max-width:240px;line-height:1.5}
+.hidden{display:none}
+.grades{display:flex;gap:9px;margin-top:18px}
+.grade{flex:1;border:1px solid var(--line);background:var(--surface);border-radius:16px;padding:12px 6px;
+  cursor:pointer;text-align:center;transition:transform .15s ease,border-color .2s ease}
+.grade:active{transform:translateY(2px)}
+.grade .g{font-weight:700;font-size:14px}
+.grade .d{font-size:10px;color:var(--ink-soft);margin-top:3px}
+.grade.again .g{color:var(--cinnabar)} .grade.hard .g{color:var(--gold)}
+.grade.good .g{color:var(--jade)} .grade.easy .g{color:#6fa3c4}
+
+/* ---------- DICTIONARY ---------- */
+.search{display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--line);
+  border-radius:16px;padding:13px 16px;margin-bottom:18px;color:var(--ink-soft)}
+.search input{flex:1;background:none;border:none;outline:none;color:var(--ink);font-family:var(--sans);font-size:15px}
+.charcard{background:var(--surface);border:1px solid var(--line);border-radius:22px;padding:20px;margin-bottom:14px}
+.charcard .hd{display:flex;gap:18px;align-items:center;margin-bottom:16px}
+.charcard .glyph{width:96px;height:96px;border-radius:16px;border:1px dashed var(--line);position:relative;flex:none;
+  display:grid;place-items:center;background:repeating-linear-gradient(0deg,transparent 0 47px,var(--line) 47px 48px),
+  repeating-linear-gradient(90deg,transparent 0 47px,var(--line) 47px 48px)}
+.charcard .glyph b{font-family:var(--serif);font-size:64px;font-weight:600}
+.charcard .glyph .cross{position:absolute;inset:0;background:
+  linear-gradient(var(--line),var(--line)) center/1px 100% no-repeat,
+  linear-gradient(var(--line),var(--line)) center/100% 1px no-repeat;opacity:.6}
+.charcard .info .py{font-family:var(--display);font-style:italic;font-size:22px;color:var(--gold)}
+.charcard .info .df{font-size:14px;color:var(--ink-soft);margin-top:4px;line-height:1.5}
+.comp{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+.comp span{font-size:12px;border:1px solid var(--line);border-radius:10px;padding:6px 10px;color:var(--ink-soft)}
+.comp span b{font-family:var(--serif);color:var(--ink);font-size:15px;margin-right:5px}
+
+/* ---------- GENRE ---------- */
+.ladder{position:relative;padding-left:30px;margin-top:6px}
+.ladder::before{content:"";position:absolute;left:9px;top:8px;bottom:8px;width:2px;
+  background:linear-gradient(var(--jade),var(--gold),var(--cinnabar))}
+.rung{position:relative;margin-bottom:16px;background:var(--surface);border:1px solid var(--line);
+  border-radius:18px;padding:14px 16px}
+.rung::before{content:"";position:absolute;left:-25px;top:18px;width:14px;height:14px;border-radius:50%;
+  background:var(--bg);border:2px solid var(--ink-faint)}
+.rung.done::before{background:var(--jade);border-color:var(--jade)}
+.rung.now::before{background:var(--cinnabar);border-color:var(--cinnabar);box-shadow:0 0 0 4px color-mix(in srgb,var(--cinnabar) 22%,transparent)}
+.rung .rn{font-family:var(--serif);font-weight:600;font-size:17px;display:flex;align-items:center;gap:9px}
+.rung .rn .py{font-family:var(--display);font-style:italic;font-size:13px;color:var(--gold)}
+.rung .rd{font-size:12px;color:var(--ink-soft);margin-top:4px;line-height:1.5}
+
+/* ---------- bottom nav ---------- */
+.nav{position:absolute;left:0;right:0;bottom:0;z-index:30;
+  background:color-mix(in srgb,var(--bg-2) 88%,transparent);backdrop-filter:blur(16px);
+  border-top:1px solid var(--line);display:flex;padding:10px 8px 22px}
+.nav button{flex:1;background:none;border:none;cursor:pointer;color:var(--ink-faint);
+  display:flex;flex-direction:column;align-items:center;gap:5px;font-family:var(--sans);font-size:10px;
+  letter-spacing:.03em;transition:color .25s ease}
+.nav button .ni{width:23px;height:23px;stroke:currentColor;fill:none;stroke-width:1.7;transition:transform .25s ease}
+.nav button.active{color:var(--cinnabar)}
+.nav button.active .ni{transform:translateY(-2px)}
+.nav button .cn{font-family:var(--serif);font-size:11px}
+
+/* theme toggle + caption */
+.toggle{position:fixed;top:20px;right:22px;z-index:10000;background:var(--surface);border:1px solid var(--line);
+  color:var(--ink-soft);border-radius:40px;padding:9px 16px;font-family:var(--sans);font-size:12px;cursor:pointer;
+  display:flex;align-items:center;gap:8px}
+.cap{position:fixed;left:22px;bottom:18px;z-index:10000;color:var(--ink-faint);font-size:11px;max-width:230px;line-height:1.5;font-family:var(--sans)}
+.cap b{color:var(--gold);font-family:var(--display);font-style:italic;font-size:13px}
+@media(max-width:520px){.cap,.toggle{position:static;margin:10px auto;text-align:center}}
+</style>
+
+<button class="toggle" onclick="document.body.classList.toggle('light')">◑ 墨 / 纸</button>
+<div class="cap"><b>修真 — interactive prototype.</b> Tap words in the reader, tap a flashcard to flip and grade it, switch screens with the bottom bar, toggle ink / paper modes top-right.</div>
+
+<div class="shell">
+  <div class="statusbar"><span>9:41</span><span>修真<span class="dot"></span></span></div>
+
+  <div class="screens">
+
+    <!-- ============ TODAY ============ -->
+    <section class="screen active" id="today">
+      <span class="eyebrow">Hall of Cultivation · 今日</span>
+      <div class="hero">
+        <div class="seal">修</div>
+        <div class="ck-label">Characters Known</div>
+        <div class="ck-num">847</div>
+        <div class="ck-sub">153 until you can read your first full novel</div>
+        <div class="ck-bar"><i></i></div>
+        <svg class="mtn" viewBox="0 0 400 90" preserveAspectRatio="none">
+          <path d="M0 90 L0 55 Q40 20 80 48 Q120 78 160 40 Q210 0 260 46 Q300 74 340 35 Q370 15 400 50 L400 90 Z"
+            fill="var(--gold)" opacity=".35"/>
+          <path d="M0 90 L0 70 Q50 45 100 66 Q150 86 200 60 Q260 30 320 64 Q360 82 400 66 L400 90 Z"
+            fill="var(--cinnabar)" opacity=".3"/>
+        </svg>
+      </div>
+
+      <div class="row">
+        <div class="card" onclick="go('review')">
+          <div class="k"><svg class="ic" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/></svg>Reviews due</div>
+          <div class="big">38<small>cards</small></div>
+        </div>
+        <div class="card" onclick="go('learn')">
+          <div class="k"><svg class="ic" viewBox="0 0 24 24"><path d="M12 3 4 7l8 4 8-4-8-4z"/><path d="M4 12l8 4 8-4"/></svg>Today's lesson</div>
+          <div class="big" style="font-size:22px;margin-top:8px">第 19 课<small style="display:block;margin:6px 0 0">8 new · grammar 把</small></div>
+        </div>
+      </div>
+
+      <div class="section-h"><b>Continue reading</b><span>继续</span></div>
+      <div class="novel" onclick="go('read')">
+        <div class="cover"><span class="t">剑出</span></div>
+        <div class="meta">
+          <div class="nm">剑出山门 <span class="pill cin" style="margin-left:4px">graded</span></div>
+          <div class="au">app-original · wuxia-lite · ch.4</div>
+          <div class="cov-line"><i style="width:88%;background:linear-gradient(90deg,var(--jade-deep),var(--jade))"></i></div>
+          <div class="cov-tag"><span>readable for you</span><b style="color:var(--jade)">88%</b></div>
+        </div>
+      </div>
+
+      <div class="section-h"><b>Almost within reach</b><span>书阁</span></div>
+      <div class="novel" style="margin-bottom:14px">
+        <div class="cover" style="background:linear-gradient(160deg,#3a4a3f,#1c241f)"><span class="t" style="color:#cfe0d0">仙道</span></div>
+        <div class="meta">
+          <div class="nm">仙道长歌 <span class="pill jade" style="margin-left:4px">imported · epub</span></div>
+          <div class="au">your library · xianxia</div>
+          <div class="cov-line"><i style="width:71%;background:linear-gradient(90deg,var(--gold),var(--cinnabar))"></i></div>
+          <div class="cov-tag"><span>learn ~120 more chars to unlock</span><b style="color:var(--gold)">71%</b></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ READER ============ -->
+    <section class="screen" id="read">
+      <div class="reader-top">
+        <span class="cn" style="font-family:var(--serif);font-weight:600">剑出山门</span>
+        <span class="ch">第四章 · 渡劫</span>
+      </div>
+      <div class="reader-cov"><i></i></div>
+      <div class="reader-title">渡劫</div>
+      <div class="reader-sub">88% of characters here are already yours · tap any word</div>
+      <div class="prose">
+        <p>
+          <span class="w unknown" data-hz="少年" data-py="shàonián" data-df="a youth; young man"
+            data-tags="HSK3 · freq #312 · 名词">少年</span><span class="w known">立于</span><span class="w known">山巅</span>，<span class="w unknown" data-hz="剑光" data-py="jiànguāng" data-df="the gleam / light of a sword blade"
+            data-tags="genre · wuxia · 剑+光">剑光</span><span class="w known">如</span><span class="w known">雪</span>。
+          <span class="w known">他</span><span class="w known">闭目</span><span class="w known">调息</span>，<span class="w known">体内</span><span class="w unknown" data-hz="真气" data-py="zhēnqì" data-df="‘true qi’ — internal energy cultivated in the body"
+            data-tags="genre · cultivation · 真+气">真气</span><span class="w known">缓缓</span><span class="w known">流转</span>。
+        </p>
+        <p>
+          <span class="w unknown" data-hz="灵气" data-py="língqì" data-df="spiritual energy drawn from heaven and earth"
+            data-tags="genre · cultivation · freq(genre) #41">灵气</span><span class="w known">自</span><span class="w known">四面八方</span><span class="w known">汇聚</span><span class="w known">而来</span>。
+          <span class="w known">山风</span><span class="w known">拂过</span>，<span class="w known">吹动</span><span class="w known">他</span><span class="w known">的</span><span class="w known">白衣</span>。
+        </p>
+        <p>
+          「<span class="w known">今日</span>，<span class="w known">我</span><span class="w known">便</span><span class="w known">要</span><span class="w unknown" data-hz="渡" data-py="dù" data-df="to cross over; to survive / pass through (a tribulation)"
+            data-tags="genre · key verb · 渡+劫">渡</span><span class="w unknown" data-hz="天劫" data-py="tiānjié" data-df="heavenly tribulation — the trial a cultivator must survive to ascend"
+            data-tags="genre · cultivation · core term">天劫</span>。」<span class="w known">他</span><span class="w known">低声</span><span class="w known">道</span>。
+        </p>
+      </div>
+    </section>
+
+    <!-- ============ REVIEW ============ -->
+    <section class="screen" id="review">
+      <div class="rev-wrap">
+        <div class="rev-prog"><span class="t">13 / 38</span><div class="b"><i></i></div><span class="t" style="color:var(--gold)">FSRS v6</span></div>
+        <div class="flash" id="flash" onclick="flip()">
+          <div class="seal-bg">劫</div>
+          <div class="face" id="face"><div class="face-hz">劫</div><div class="hint">tap to reveal</div></div>
+          <div class="back hidden" id="back">
+            <div class="face-hz" style="font-size:60px">劫</div>
+            <div class="py">jié</div>
+            <div class="df">calamity; tribulation · a catastrophe one must survive</div>
+          </div>
+        </div>
+        <div class="grades" id="grades" style="visibility:hidden">
+          <div class="grade again" onclick="next(event)"><div class="g">Again</div><div class="d">&lt;1m</div></div>
+          <div class="grade hard" onclick="next(event)"><div class="g">Hard</div><div class="d">2d</div></div>
+          <div class="grade good" onclick="next(event)"><div class="g">Good</div><div class="d">6d</div></div>
+          <div class="grade easy" onclick="next(event)"><div class="g">Easy</div><div class="d">14d</div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ DICTIONARY ============ -->
+    <section class="screen" id="dict">
+      <span class="eyebrow">Compendium · 字典</span>
+      <div class="title">Dictionary</div>
+      <div class="search">
+        <svg class="ic" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
+        <input placeholder="hanzi · pinyin · english" value="劫">
+      </div>
+      <div class="charcard">
+        <div class="hd">
+          <div class="glyph"><div class="cross"></div><b>劫</b></div>
+          <div class="info">
+            <div class="py">jié</div>
+            <div class="df">to rob; calamity; (Buddhist) kalpa — a vast cosmic age; a tribulation</div>
+            <div style="margin-top:8px"><span class="pill cin">genre core</span> <span class="pill jade" style="margin-left:4px">known</span></div>
+          </div>
+        </div>
+        <div style="font-size:12px;color:var(--ink-soft);letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px">Components · 部件</div>
+        <div class="comp">
+          <span><b>去</b>to go (phonetic)</span>
+          <span><b>力</b>strength · 力 radical</span>
+        </div>
+        <div style="font-size:12px;color:var(--ink-soft);letter-spacing:.1em;text-transform:uppercase;margin:16px 0 8px">Appears in · 词语</div>
+        <div class="comp">
+          <span><b>天劫</b>heavenly tribulation</span>
+          <span><b>渡劫</b>to survive tribulation</span>
+          <span><b>劫难</b>calamity</span>
+        </div>
+      </div>
+      <div class="novel" style="margin-top:4px">
+        <div class="cover" style="width:48px;height:48px;border-radius:12px;background:linear-gradient(160deg,var(--gold),#8a6a25)"><span style="font-family:var(--brush);font-size:24px;color:#241a08">写</span></div>
+        <div class="meta"><div class="nm" style="font-size:15px">Practice stroke order</div><div class="au">7 strokes · trace mode · optional</div></div>
+        <svg class="ic" viewBox="0 0 24 24" style="color:var(--ink-soft)"><path d="M9 6l6 6-6 6"/></svg>
+      </div>
+    </section>
+
+    <!-- ============ GENRE ============ -->
+    <section class="screen" id="genre">
+      <span class="eyebrow">The Cultivation Path · 修仙</span>
+      <div class="title">Realm Ladder</div>
+      <div style="font-size:13px;color:var(--ink-soft);margin:-10px 0 18px;line-height:1.5">
+        The power scale every xianxia reader must internalise. Master each tier's vocabulary to climb.
+      </div>
+      <div class="ladder">
+        <div class="rung done"><div class="rn">炼气 <span class="py">liànqì · Qi Refining</span></div><div class="rd">体 · 气 · 经脉 · 灵根 — 12 / 12 terms mastered</div></div>
+        <div class="rung done"><div class="rn">筑基 <span class="py">zhùjī · Foundation</span></div><div class="rd">丹田 · 灵力 · 法器 — 15 / 15 terms mastered</div></div>
+        <div class="rung now"><div class="rn">金丹 <span class="py">jīndān · Golden Core</span> <span class="pill cin" style="margin-left:auto">now</span></div><div class="rd">金丹 · 元神 · 渡劫 · 雷劫 — 9 / 18 terms · keep going</div></div>
+        <div class="rung"><div class="rn">元婴 <span class="py">yuányīng · Nascent Soul</span></div><div class="rd">元婴 · 神识 · 化神 — locked · reach 1,000 chars</div></div>
+        <div class="rung"><div class="rn">化神 <span class="py">huàshén · Spirit Severing</span></div><div class="rd">unlocks with the Nascent Soul tier</div></div>
+      </div>
+    </section>
+
+  </div><!-- /screens -->
+
+  <!-- pop-up dictionary -->
+  <div class="sheet-scrim" id="scrim" onclick="closeSheet()"></div>
+  <div class="sheet" id="sheet">
+    <div class="grip"></div>
+    <div class="hz"><span id="s-hz">天劫</span>
+      <button class="play"><svg class="ic" viewBox="0 0 24 24" style="stroke-width:1.4"><path d="M8 5v14l11-7z"/></svg></button>
+    </div>
+    <div class="py" id="s-py">tiānjié</div>
+    <div class="def" id="s-df">heavenly tribulation</div>
+    <div class="tags" id="s-tags"></div>
+    <div class="actions">
+      <button class="btn primary" onclick="closeSheet()">+ Add to deck</button>
+      <button class="btn ghost" onclick="closeSheet()">Mark known</button>
+    </div>
+  </div>
+
+  <!-- bottom nav -->
+  <nav class="nav" id="nav">
+    <button class="active" data-t="today" onclick="go('today')"><svg class="ni" viewBox="0 0 24 24"><path d="M3 10l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg><span class="cn">今日</span></button>
+    <button data-t="read" onclick="go('read')"><svg class="ni" viewBox="0 0 24 24"><path d="M4 5h7v14H4z"/><path d="M13 5h7v14h-7z"/></svg><span class="cn">阅读</span></button>
+    <button data-t="review" onclick="go('review')"><svg class="ni" viewBox="0 0 24 24"><rect x="4" y="7" width="16" height="12" rx="2"/><path d="M8 7V5h8v2"/></svg><span class="cn">复习</span></button>
+    <button data-t="dict" onclick="go('dict')"><svg class="ni" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg><span class="cn">字典</span></button>
+    <button data-t="genre" onclick="go('genre')"><svg class="ni" viewBox="0 0 24 24"><path d="M12 3l2.5 5.5L20 9l-4 4 1 6-5-3-5 3 1-6-4-4 5.5-.5z"/></svg><span class="cn">修仙</span></button>
+  </nav>
+</div>
+
+<script>
+function go(id){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.toggle('active',s.id===id));
+  document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active',b.dataset.t===id));
+  document.querySelector('.screens').scrollTop=0;
+  document.querySelectorAll('.screen').forEach(s=>{if(s.id===id)s.scrollTop=0});
+  if(id==='review'){resetCard()}
+}
+/* pop-up dictionary */
+let lastSel=null;
+document.querySelectorAll('.w.unknown').forEach(w=>{
+  w.addEventListener('click',()=>{
+    if(lastSel)lastSel.classList.remove('sel');
+    w.classList.add('sel');lastSel=w;
+    s_hz.textContent=w.dataset.hz; s_py.textContent=w.dataset.py; s_df.textContent=w.dataset.df;
+    const tags=w.dataset.tags.split('·').map(t=>t.trim());
+    s_tags.innerHTML=tags.map(t=>`<span class="tag">${t}</span>`).join('');
+    scrim.classList.add('show'); sheet.classList.add('show');
+  });
+});
+function closeSheet(){scrim.classList.remove('show');sheet.classList.remove('show');if(lastSel){lastSel.classList.remove('sel');lastSel=null}}
+/* flashcard */
+let flipped=false;
+function flip(){
+  if(flipped)return;flipped=true;
+  face.classList.add('hidden');back.classList.remove('hidden');
+  grades.style.visibility='visible';
+}
+function next(e){e.stopPropagation();resetCard()}
+function resetCard(){flipped=false;face.classList.remove('hidden');back.classList.add('hidden');grades.style.visibility='hidden'}
+</script>

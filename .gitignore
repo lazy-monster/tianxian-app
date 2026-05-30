@@ -1,0 +1,13 @@
+*.iml
+.gradle/
+.idea/
+build/
+local.properties
+.DS_Store
+captures/
+.externalNativeBuild/
+.cxx/
+# data-build caches (regenerable); keep the committed content.db in app/src/main/assets
+data-build/mmah_dictionary.txt
+data-build/hsk_complete.json
+data-build/__pycache__/
