@@ -33,8 +33,11 @@ offline. No account, no subscription, no ads.
   one-tap mining into your review deck.
 - **Handwriting** — stroke-order animation plus finger-tracing practice for ~2,000 of the
   most common characters.
-- **Genre Path** — the cultivation realm ladder (炼气 → 渡劫) explained tier by tier, plus
-  curated xianxia/wuxia vocabulary grouped by theme.
+- **Cultivation** — your learning progress *is* your rank. Characters known, words
+  mastered (FSRS), and genre terms learned blend into a cultivation base that places you
+  on the realm ladder (炼气 Qi Refining → 渡劫 Tribulation), with stages, breakthroughs, and
+  a long climb where comfortable native-novel reading sits near the peak. The genre's
+  signature vocabulary is folded in, ordered by difficulty.
 
 **A reader for your own books.** Import EPUB, TXT, MOBI, PDF, or a photo of a page. Tap any
 word for its reading and meaning, mine it into spaced repetition, or mark it known. Words
@@ -48,7 +51,7 @@ scheduler that needs ~20–30% fewer reviews than classic SM-2 for the same rete
 English, with tone-marked readings and on-device audio for any word.
 
 **Designed to be pleasant.** An "Ink & Jade" theme — ink-wash dark or rice-paper light —
-with a serif reader. See `prototype.html` for the visual reference.
+with a serif reader. See `xianxia-app-prototype.html` for the visual reference.
 
 ## Tech stack
 
