@@ -27,7 +27,7 @@ private val SECTIONS = listOf(
     Section("learn/radicals", "部", "Radicals & Components", "The 214 building blocks of every character", "Stage 1"),
     Section("learn/levels", "级", "Vocabulary by Level", "Frequency-ordered words, HSK 1 → 9", "Stage 2"),
     Section("learn/writing", "写", "Handwriting", "Stroke order & tracing practice", "Anytime"),
-    Section("learn/genre", "仙", "Genre Path", "Cultivation & wuxia vocabulary for web novels", "Anytime"),
+    Section("learn/cultivation", "修", "Cultivation", "Your rank on the realm ladder, plus genre vocabulary", "Anytime"),
 )
 
 @Composable

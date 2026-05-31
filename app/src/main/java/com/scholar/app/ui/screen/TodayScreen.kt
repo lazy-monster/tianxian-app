@@ -30,7 +30,10 @@ fun TodayScreen(graph: AppGraph, onOpenReview: () -> Unit, onOpenLibrary: () -> 
     val x = Theme.x
     val known by graph.known.knownCountFlow().collectAsStateWithLifecycle(0)
     val due by graph.cards.dueCountFlow().collectAsStateWithLifecycle(0)
+    val mastered by graph.cards.masteredCountFlow().collectAsStateWithLifecycle(0)
+    val genreLearned by graph.cards.genreLearnedCountFlow().collectAsStateWithLifecycle(0)
     val books by graph.books.booksFlow().collectAsStateWithLifecycle(emptyList())
+    val rank = com.scholar.app.data.Cultivation.rankFor(known, mastered, genreLearned)
 
     LazyColumn(Modifier.fillMaxSize().background(x.bg).padding(horizontal = 22.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -51,6 +54,13 @@ fun TodayScreen(graph: AppGraph, onOpenReview: () -> Unit, onOpenLibrary: () -> 
                 val remaining = (FIRST_NOVEL_TARGET - known).coerceAtLeast(0)
                 Text(if (remaining > 0) "$remaining until your first full novel" else "ready for native novels — import one",
                     color = x.textSoft, fontSize = 13.sp)
+                Spacer(Modifier.height(10.dp))
+                Row(verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.clip(RoundedCornerShape(10.dp)).clickable { onOpenLearn() }) {
+                    Text(rank.realm.hanzi, fontFamily = SerifSC, fontSize = 18.sp, color = x.cinnabar)
+                    Spacer(Modifier.width(8.dp))
+                    Text("${rank.realm.name} · ${rank.stageLabel}", color = x.text, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                }
                 Spacer(Modifier.height(14.dp))
                 Box(Modifier.fillMaxWidth().height(7.dp).clip(RoundedCornerShape(6.dp)).background(x.bg)) {
                     Box(Modifier.fillMaxWidth((known.toFloat() / FIRST_NOVEL_TARGET).coerceIn(0f, 1f))

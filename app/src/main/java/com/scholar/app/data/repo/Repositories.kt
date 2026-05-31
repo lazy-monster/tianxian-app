@@ -59,6 +59,8 @@ class CardRepository(
 ) {
     fun dueCountFlow(): Flow<Int> = cardDao.dueCountFlow(System.currentTimeMillis())
     fun totalFlow(): Flow<Int> = cardDao.totalFlow()
+    fun masteredCountFlow(): Flow<Int> = cardDao.masteredCountFlow()
+    fun genreLearnedCountFlow(): Flow<Int> = cardDao.genreLearnedCountFlow()
     suspend fun due(limit: Int = 200): List<CardEntity> = cardDao.due(System.currentTimeMillis(), limit)
 
     /** One-tap mining from the reader/dictionary. */

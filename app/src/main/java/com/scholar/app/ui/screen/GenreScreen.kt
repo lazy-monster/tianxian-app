@@ -5,7 +5,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -16,9 +15,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.scholar.app.data.Cultivation
 import com.scholar.app.data.content.GenreTerm
 import com.scholar.app.di.AppGraph
 import com.scholar.app.srs.CardType
+import com.scholar.app.ui.theme.Brush
 import com.scholar.app.ui.theme.SerifSC
 import com.scholar.app.ui.theme.Theme
 import kotlinx.coroutines.Dispatchers
@@ -26,71 +28,123 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 private val CATEGORY = linkedMapOf(
-    "cultivation" to ("Cultivation 修炼" to "The core verbs and nouns of the cultivation process itself."),
-    "techniques" to ("Techniques & Arts 功法" to "What characters train in and fight with."),
-    "items" to ("Pills & Artifacts 丹器" to "The treasures that drive plots — elixirs, weapons, spirit tools."),
-    "wuxia" to ("Martial World 武侠" to "Terms shared with the grounded martial-arts (wuxia) genre."),
-    "society" to ("Sects & Ranks 宗门" to "How the cultivation world is organised — sects, elders, disciples."),
-    "beings" to ("Beings 众生" to "Immortals, demons, beasts, and everything in between."),
-    "register" to ("Archaic Register 古语" to "Old-style pronouns and address that pervade the genre's dialogue."),
+    "cultivation" to "Cultivation 修炼",
+    "techniques" to "Techniques & Arts 功法",
+    "items" to "Pills & Artifacts 丹器",
+    "society" to "Sects & Ranks 宗门",
+    "beings" to "Beings 众生",
+    "wuxia" to "Martial World 武侠",
+    "register" to "Archaic Register 古语",
 )
 
-// Narrative context for each rung — what this stage *means* in a story.
-private val REALM_NOTE = mapOf(
-    1 to "Where every protagonist begins — drawing qi into the body. Mortals can't sense qi at all.",
-    2 to "A true cultivator at last. Lifespan extends, and the foundation laid here caps how high one can climb.",
-    3 to "Qi condenses into a core. A real power in any mortal city; can fly short distances.",
-    4 to "A second self forms and survives bodily death. This is where sect elders usually sit.",
-    5 to "The soul begins to merge with heaven and earth, reshaping the space nearby.",
-    6 to "Starts to grasp the underlying laws of reality — often a sect's hidden ancestor.",
-    7 to "Body and law become one; a single such being can threaten a whole nation.",
-    8 to "The peak of the mortal world, preparing to leave it behind.",
-    9 to "Heaven sends down lightning to stop the ascension. Survive it, and you transcend to immortality.",
-)
+private data class Term(val t: GenreTerm, val freq: Int?)
 
 @Composable
-fun GenreScreen(graph: AppGraph, onBack: () -> Unit) {
+fun CultivationScreen(graph: AppGraph, onBack: () -> Unit) {
     val x = Theme.x
     val scope = rememberCoroutineScope()
-    var terms by remember { mutableStateOf<List<GenreTerm>>(emptyList()) }
-    LaunchedEffect(Unit) { terms = withContext(Dispatchers.IO) { graph.dictionary.genreTerms() } }
 
-    val realms = terms.filter { it.category == "realm" }.sortedBy { it.realmRank ?: 0 }
-    val byCat = terms.filter { it.category != "realm" }.groupBy { it.category }
+    val known by graph.known.knownCountFlow().collectAsStateWithLifecycle(0)
+    val mastered by graph.cards.masteredCountFlow().collectAsStateWithLifecycle(0)
+    val genreLearned by graph.cards.genreLearnedCountFlow().collectAsStateWithLifecycle(0)
+    val rank = Cultivation.rankFor(known, mastered, genreLearned)
+
+    var lexicon by remember { mutableStateOf<Map<String, List<Term>>>(emptyMap()) }
+    LaunchedEffect(Unit) {
+        lexicon = withContext(Dispatchers.IO) {
+            graph.dictionary.genreTerms().filter { it.category != "realm" }
+                .map { Term(it, graph.dictionary.lookup(it.word)?.freqRank) }
+                .groupBy { it.t.category }
+                .mapValues { (_, v) -> v.sortedBy { it.freq ?: Int.MAX_VALUE } }
+        }
+    }
 
     LazyColumn(Modifier.fillMaxSize().background(x.bg).padding(horizontal = 22.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)) {
+
+        item { ScreenHeader("Cultivation · 修为", onBack = onBack) }
+
+        // ── HERO: current rank ───────────────────────────────────────────
         item {
-            ScreenHeader("Genre Path · 修仙", "Almost every xianxia story is built on a cultivation ladder — a fixed sequence of power realms. Learn the rungs and you can place any character's strength the instant their realm is named.", onBack)
-            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(x.surface2).padding(16.dp)) {
-                Text("Why this matters", color = x.cinnabar, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                Text("Realm names are the genre's load-bearing vocabulary: they appear constantly, signal stakes, and gate the plot. Systems vary between novels, but the shape below is near-universal. Tap a character to hear it; tap + to start learning it.",
-                    color = x.textSoft, fontSize = 14.sp, lineHeight = 21.sp)
+            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(x.surface2).padding(22.dp)) {
+                Text("YOUR CULTIVATION", color = x.textSoft, fontSize = 11.sp, letterSpacing = 2.sp)
+                Spacer(Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(rank.realm.hanzi, fontFamily = Brush, fontSize = 64.sp, color = x.gold)
+                    Spacer(Modifier.width(16.dp))
+                    Column {
+                        Text(rank.realm.name, fontFamily = SerifSC, fontWeight = FontWeight.SemiBold, fontSize = 20.sp, color = x.text)
+                        Text(rank.stageLabel, color = x.cinnabar, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
+                Text(rank.realm.note, color = x.textSoft, fontSize = 13.sp, lineHeight = 19.sp)
+                Spacer(Modifier.height(16.dp))
+
+                // progress within current sub-stage
+                if (rank.isPeak) {
+                    Text("You have reached Great Perfection. The mortal world holds nothing more to read.",
+                        color = x.gold, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                } else {
+                    val span = (rank.stageEnd ?: rank.score) - rank.stageStart
+                    Box(Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(6.dp)).background(x.bg)) {
+                        Box(Modifier.fillMaxWidth(rank.progress).fillMaxHeight().clip(RoundedCornerShape(6.dp)).background(x.jade))
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    val toStage = ((rank.stageEnd ?: rank.score) - rank.score).coerceAtLeast(0)
+                    Text("修为 ${rank.score}  ·  $toStage to the next stage" +
+                        (rank.nextRealm?.let { nr -> "  ·  ${rank.toNextRealm} to break through to ${nr.name}" } ?: ""),
+                        color = x.textFaint, fontSize = 12.sp)
+                }
             }
-            Spacer(Modifier.height(8.dp))
-            Text("The Cultivation Ladder", fontFamily = SerifSC, fontWeight = FontWeight.SemiBold, fontSize = 18.sp, color = x.text)
+        }
+
+        // ── breakdown of the blend ───────────────────────────────────────
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Contribution("Characters\nknown", known, "+$known", x.gold, Modifier.weight(1f))
+                Contribution("Words\nmastered", mastered, "+${(mastered * 0.2).toInt()}", x.jade, Modifier.weight(1f))
+                Contribution("Genre terms\nlearned", genreLearned, "+${(genreLearned * 0.5).toInt()}", x.cinnabar, Modifier.weight(1f))
+            }
+            Text("Your cultivation base blends all three — characters are the spine, mastered words add breadth, and genre terms count double toward fluency in the novels you actually read.",
+                color = x.textFaint, fontSize = 12.sp, lineHeight = 17.sp, modifier = Modifier.padding(top = 8.dp))
+        }
+
+        // ── the ladder as a scoreboard ───────────────────────────────────
+        item {
+            Spacer(Modifier.height(6.dp))
+            Text("The Ladder", fontFamily = SerifSC, fontWeight = FontWeight.SemiBold, fontSize = 18.sp, color = x.text)
+            Text("Nine realms from mortal to immortal. Your climb is the long one — reaching Tribulation means reading native novels with ease.",
+                color = x.textFaint, fontSize = 12.sp, lineHeight = 17.sp)
             Spacer(Modifier.height(4.dp))
         }
-
-        itemsIndexed(realms) { i, r ->
-            val rank = r.realmRank ?: (i + 1)
-            RealmRung(rank, r, note = REALM_NOTE[rank], last = i == realms.lastIndex,
-                onHear = { graph.speaker.speak(r.word) },
-                onMine = { scope.launch { graph.cards.mine(r.word, "${r.pinyin} · ${r.gloss}", CardType.WORD_RECOGNITION, "Realm ladder") } })
+        items(Cultivation.REALMS) { r ->
+            val attained = r.index < rank.realm.index
+            val isCurrent = r.index == rank.realm.index
+            RealmRow(hanzi = r.hanzi, name = r.name, note = r.note, entry = r.entryScore,
+                attained = attained, isCurrent = isCurrent, stageLabel = if (isCurrent) rank.stageLabel else null,
+                last = r.index == Cultivation.REALMS.lastIndex)
         }
 
-        CATEGORY.forEach { (key, pair) ->
-            val list = byCat[key].orEmpty()
+        // ── genre lexicon, ordered by difficulty ─────────────────────────
+        item {
+            Spacer(Modifier.height(14.dp))
+            Text("Genre Lexicon", fontFamily = SerifSC, fontWeight = FontWeight.SemiBold, fontSize = 18.sp, color = x.text)
+            Text("The genre's signature vocabulary, easiest (most common) first. Learn these and your cultivation climbs faster. Tap to hear; + to study.",
+                color = x.textFaint, fontSize = 12.sp, lineHeight = 17.sp)
+            Spacer(Modifier.height(4.dp))
+        }
+        CATEGORY.forEach { (key, label) ->
+            val list = lexicon[key].orEmpty()
             if (list.isNotEmpty()) {
                 item {
-                    Spacer(Modifier.height(12.dp))
-                    Text(pair.first, fontFamily = SerifSC, fontWeight = FontWeight.SemiBold, fontSize = 17.sp, color = x.text)
-                    Text(pair.second, color = x.textFaint, fontSize = 12.sp, lineHeight = 17.sp)
-                    Spacer(Modifier.height(6.dp))
+                    Spacer(Modifier.height(8.dp))
+                    Text(label, fontFamily = SerifSC, fontWeight = FontWeight.Medium, fontSize = 15.sp, color = x.text)
+                    Spacer(Modifier.height(4.dp))
                 }
-                items(list) { t ->
-                    TermRow(t, onHear = { graph.speaker.speak(t.word) },
-                        onMine = { scope.launch { graph.cards.mine(t.word, "${t.pinyin} · ${t.gloss}", CardType.WORD_RECOGNITION, "Genre: $key") } })
+                items(list) { tw ->
+                    TermRow(tw.t, onHear = { graph.speaker.speak(tw.t.word) },
+                        onMine = { scope.launch { graph.cards.mine(tw.t.word, "${tw.t.pinyin} · ${tw.t.gloss}", CardType.WORD_RECOGNITION, "Genre: $key") } })
                 }
             }
         }
@@ -99,29 +153,44 @@ fun GenreScreen(graph: AppGraph, onBack: () -> Unit) {
 }
 
 @Composable
-private fun RealmRung(rank: Int, r: GenreTerm, note: String?, last: Boolean, onHear: () -> Unit, onMine: () -> Unit) {
+private fun Contribution(label: String, value: Int, contrib: String, accent: Color, modifier: Modifier) {
     val x = Theme.x
+    Column(modifier.clip(RoundedCornerShape(16.dp)).background(x.surface).padding(13.dp)) {
+        Text("$value", fontFamily = SerifSC, fontWeight = FontWeight.SemiBold, fontSize = 26.sp, color = accent)
+        Text(label, color = x.textSoft, fontSize = 11.sp, lineHeight = 14.sp)
+        Text("$contrib 修为", color = x.textFaint, fontSize = 10.sp)
+    }
+}
+
+@Composable
+private fun RealmRow(hanzi: String, name: String, note: String, entry: Int, attained: Boolean,
+                     isCurrent: Boolean, stageLabel: String?, last: Boolean) {
+    val x = Theme.x
+    val nodeColor = when { isCurrent -> x.cinnabar; attained -> x.jadeDeep; else -> x.surface2 }
     Row(Modifier.fillMaxWidth()) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(40.dp)) {
-            Box(Modifier.size(34.dp).clip(RoundedCornerShape(50)).background(x.cinnabarDeep), contentAlignment = Alignment.Center) {
-                Text("$rank", color = Color(0xFFF4E4C4), fontFamily = SerifSC, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+            Box(Modifier.size(36.dp).clip(RoundedCornerShape(50)).background(nodeColor), contentAlignment = Alignment.Center) {
+                Text(if (attained) "✓" else hanzi.take(1), fontFamily = SerifSC,
+                    color = if (isCurrent || attained) Color(0xFFF4E4C4) else x.textFaint,
+                    fontWeight = FontWeight.Bold, fontSize = if (attained) 16.sp else 18.sp)
             }
-            if (!last) Box(Modifier.width(2.dp).height(56.dp).background(x.line))
+            if (!last) Box(Modifier.width(2.dp).height(40.dp).background(if (attained) x.jadeDeep else x.line))
         }
         Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f).clip(RoundedCornerShape(16.dp)).background(x.surface).padding(14.dp)) {
+        Column(Modifier.weight(1f).clip(RoundedCornerShape(16.dp))
+            .background(if (isCurrent) x.surface2 else x.surface).padding(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(r.word, fontFamily = SerifSC, fontWeight = FontWeight.SemiBold, fontSize = 22.sp, color = x.text,
-                    modifier = Modifier.clickable { onHear() })
-                Spacer(Modifier.width(10.dp))
-                Text(r.pinyin, color = x.gold, fontSize = 14.sp)
+                Text("$hanzi  $name", fontFamily = SerifSC,
+                    fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Medium, fontSize = 16.sp,
+                    color = if (!attained && !isCurrent) x.textFaint else x.text)
                 Spacer(Modifier.weight(1f))
-                Text("+", color = x.jade, fontSize = 24.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { onMine() })
+                if (isCurrent && stageLabel != null) Text(stageLabel, color = x.cinnabar, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                else if (attained) Text("attained", color = x.jade, fontSize = 11.sp)
+                else Text("🔒 $entry 修为", color = x.textFaint, fontSize = 11.sp)
             }
-            Text(r.gloss, color = x.textSoft, fontSize = 13.sp)
-            if (note != null) {
+            if (isCurrent) {
                 Spacer(Modifier.height(4.dp))
-                Text(note, color = x.textFaint, fontSize = 12.sp, lineHeight = 17.sp)
+                Text(note, color = x.textSoft, fontSize = 12.sp, lineHeight = 17.sp)
             }
         }
     }

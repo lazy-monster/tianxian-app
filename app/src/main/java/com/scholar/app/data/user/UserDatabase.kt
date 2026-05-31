@@ -69,6 +69,12 @@ interface CardDao {
     @Query("SELECT COUNT(*) FROM cards")
     fun totalFlow(): Flow<Int>
 
+    @Query("SELECT COUNT(*) FROM cards WHERE suspended=0 AND stability>=:minStability")
+    fun masteredCountFlow(minStability: Double = 21.0): Flow<Int>
+
+    @Query("SELECT COUNT(*) FROM cards WHERE suspended=0 AND stability>=:minStability AND (source LIKE 'Genre%' OR source LIKE 'Realm%')")
+    fun genreLearnedCountFlow(minStability: Double = 7.0): Flow<Int>
+
     @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insert(card: CardEntity): Long
     @Update suspend fun update(card: CardEntity)
 }

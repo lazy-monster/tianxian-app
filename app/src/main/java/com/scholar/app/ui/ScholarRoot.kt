@@ -76,7 +76,7 @@ fun ScholarRoot(graph: AppGraph, dark: Boolean, onToggleTheme: () -> Unit) {
             composable("learn/radicals") { RadicalsScreen(graph, onBack = { nav.popBackStack() },
                 onOpenChar = { ch -> nav.navigate("char/$ch") }) }
             composable("learn/levels") { LevelsScreen(graph, onBack = { nav.popBackStack() }) }
-            composable("learn/genre") { GenreScreen(graph, onBack = { nav.popBackStack() }) }
+            composable("learn/cultivation") { CultivationScreen(graph, onBack = { nav.popBackStack() }) }
             composable("learn/writing") { WritingPickerScreen(graph, onBack = { nav.popBackStack() },
                 onPractice = { ch -> nav.navigate("writing/$ch") }) }
 
