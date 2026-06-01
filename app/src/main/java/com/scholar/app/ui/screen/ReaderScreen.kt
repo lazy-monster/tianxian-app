@@ -30,7 +30,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 private data class Tok(val text: String, val isWord: Boolean, val start: Int, val end: Int)
-private data class Popup(val word: String, val pinyin: String, val gloss: String, val tags: List<String>)
+private data class Popup(val word: String, val pinyin: String, val gloss: String,
+                         val tags: List<String>, val examples: List<com.scholar.app.data.content.Sentence>)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -167,6 +168,20 @@ fun ReaderScreen(graph: AppGraph, bookId: String, onBack: () -> Unit, onOpenChar
                     }
                     Spacer(Modifier.height(12.dp))
                     Text(p.gloss, color = x.text, fontSize = 15.sp, lineHeight = 22.sp)
+                    if (p.examples.isNotEmpty()) {
+                        Spacer(Modifier.height(14.dp))
+                        Text("IN CONTEXT", color = x.textFaint, fontSize = 11.sp, letterSpacing = 2.sp)
+                        Spacer(Modifier.height(6.dp))
+                        p.examples.forEach { s ->
+                            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(x.surface)
+                                .clickable { graph.speaker.speak(s.zh) }.padding(11.dp)) {
+                                Text(s.zh, fontFamily = SerifSC, color = x.text, fontSize = 16.sp, lineHeight = 24.sp)
+                                Spacer(Modifier.height(3.dp))
+                                Text(s.en, color = x.textSoft, fontSize = 12.sp, lineHeight = 17.sp)
+                            }
+                            Spacer(Modifier.height(7.dp))
+                        }
+                    }
                     if (p.word.length == 1) {
                         Spacer(Modifier.height(10.dp))
                         Text("View character: components & writing ›", color = x.jade, fontSize = 14.sp,
@@ -210,16 +225,17 @@ private fun NavBtn(label: String, enabled: Boolean, onClick: () -> Unit) {
 }
 
 private suspend fun buildPopup(graph: AppGraph, word: String): Popup = withContext(Dispatchers.IO) {
+    val examples = graph.dictionary.examples(word, 3)
     val entry = graph.dictionary.lookup(word)
     if (entry != null) {
         val tags = buildList {
             entry.freqRank?.let { add("freq #$it") }
             if (word.length == 1) add("char")
         }
-        Popup(entry.simplified, graph.dictionary.toned(entry.pinyin), entry.gloss, tags)
+        Popup(entry.simplified, graph.dictionary.toned(entry.pinyin), entry.gloss, tags, examples)
     } else {
         val ci = graph.dictionary.character(word)
         Popup(word, ci?.pinyin ?: "", ci?.definition ?: "(no entry)",
-            buildList { ci?.radical?.takeIf { it.isNotEmpty() }?.let { add("radical $it") } })
+            buildList { ci?.radical?.takeIf { it.isNotEmpty() }?.let { add("radical $it") } }, examples)
     }
 }

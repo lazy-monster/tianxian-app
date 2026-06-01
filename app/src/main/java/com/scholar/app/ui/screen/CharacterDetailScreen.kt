@@ -13,10 +13,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.scholar.app.data.content.CharInfo
+import com.scholar.app.data.content.Sentence
 import com.scholar.app.di.AppGraph
 import com.scholar.app.srs.CardType
 import com.scholar.app.ui.theme.SerifSC
@@ -35,6 +39,7 @@ fun CharacterDetailScreen(
     var info by remember { mutableStateOf<CharInfo?>(null) }
     var components by remember { mutableStateOf<List<CharInfo>>(emptyList()) }
     var hasStrokes by remember { mutableStateOf(false) }
+    var examples by remember { mutableStateOf<List<Sentence>>(emptyList()) }
     var mined by remember { mutableStateOf(false) }
 
     LaunchedEffect(ch) {
@@ -42,6 +47,7 @@ fun CharacterDetailScreen(
             info = graph.dictionary.character(ch)
             components = graph.dictionary.components(ch)
             hasStrokes = graph.dictionary.strokeData(ch) != null
+            examples = graph.dictionary.examples(ch)
         }
     }
 
@@ -99,6 +105,21 @@ fun CharacterDetailScreen(
             Spacer(Modifier.height(16.dp))
         }
 
+        // example sentences (Tatoeba) — seeing the character in real, translated context
+        if (examples.isNotEmpty()) {
+            SectionTitle("In context")
+            examples.forEach { s ->
+                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(x.surface)
+                    .clickable { graph.speaker.speak(s.zh) }.padding(13.dp)) {
+                    SentenceLine(s.zh, ch, x.text, x.cinnabar)
+                    Spacer(Modifier.height(5.dp))
+                    Text(s.en, color = x.textSoft, fontSize = 13.sp, lineHeight = 18.sp)
+                }
+                Spacer(Modifier.height(8.dp))
+            }
+            Spacer(Modifier.height(8.dp))
+        }
+
         // actions
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
             ActionButton(if (hasStrokes) "✍ Practise writing" else "✍ Writing (no data)", x.cinnabar, Modifier.weight(1f),
@@ -112,6 +133,23 @@ fun CharacterDetailScreen(
         }
         Spacer(Modifier.height(30.dp))
     }
+}
+
+/** The Chinese sentence with every occurrence of [target] tinted, so the eye lands on it. */
+@Composable
+private fun SentenceLine(zh: String, target: String, base: Color, accent: Color) {
+    val text = buildAnnotatedString {
+        var i = 0
+        while (i < zh.length) {
+            if (target.isNotEmpty() && zh.startsWith(target, i)) {
+                withStyle(SpanStyle(color = accent, fontWeight = FontWeight.SemiBold)) { append(target) }
+                i += target.length
+            } else {
+                append(zh[i]); i++
+            }
+        }
+    }
+    Text(text, fontFamily = SerifSC, color = base, fontSize = 18.sp, lineHeight = 28.sp)
 }
 
 @Composable

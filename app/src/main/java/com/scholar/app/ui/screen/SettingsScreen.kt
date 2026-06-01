@@ -196,7 +196,7 @@ fun SettingsScreen(graph: AppGraph, dark: Boolean, onToggleTheme: () -> Unit, on
         Spacer(Modifier.height(8.dp))
         AboutCard("Scholar", "A free, offline-first app for learning to read Chinese web novels — pinyin first, characters by their components, frequency-ordered vocabulary, spaced repetition, and a friction-free reader.")
         Spacer(Modifier.height(10.dp))
-        AboutCard("Open data", "Dictionary: CC-CEDICT (CC BY-SA). Characters & strokes: Make Me a Hanzi (Arphic). Levels: complete-hsk-vocabulary (MIT). Frequency: wordfreq (MIT). The 214 radicals are curated reference data.")
+        AboutCard("Open data", "Dictionary: CC-CEDICT (CC BY-SA). Characters & strokes: Make Me a Hanzi (Arphic). Levels: complete-hsk-vocabulary (MIT). Frequency: wordfreq (MIT). Example sentences: Tatoeba (CC BY 2.0 FR). The 214 radicals are curated reference data.")
         Spacer(Modifier.height(10.dp))
         AboutCard("Your data stays yours", "No account, no ads, no tracking. Your progress and imported books live only on this device — back them up above whenever you like.")
         Spacer(Modifier.height(30.dp))

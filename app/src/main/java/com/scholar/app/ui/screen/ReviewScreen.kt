@@ -3,7 +3,9 @@ package com.scholar.app.ui.screen
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -66,10 +68,16 @@ fun ReviewScreen(graph: AppGraph, onOpenChar: (String) -> Unit = {}) {
         }
         Spacer(Modifier.height(22.dp))
 
-        // flashcard
+        // flashcard — content scrolls so long definitions never push the speak/study
+        // controls out of reach. Short cards still sit centred.
+        val cardScroll = rememberScrollState()
+        LaunchedEffect(card.id, flipped) { cardScroll.scrollTo(0) }
         Box(Modifier.weight(1f).fillMaxWidth().clip(RoundedCornerShape(26.dp)).background(x.surface2)
             .clickable { flipped = true }, contentAlignment = Alignment.Center) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(
+                Modifier.verticalScroll(cardScroll).padding(vertical = 24.dp, horizontal = 8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
                 Text(card.frontRef, fontFamily = SerifSC, fontWeight = FontWeight.SemiBold,
                     fontSize = if (card.frontRef.length <= 2) 96.sp else 56.sp, color = x.text)
                 if (flipped) {

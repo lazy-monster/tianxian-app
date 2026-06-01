@@ -32,7 +32,14 @@ data class HskWord(val word: String, val pinyin: String, val meaning: String, va
 /** Stroke-order data for one character (Make Me a Hanzi format, 1024×1024 grid, y-down). */
 data class StrokeData(val strokes: List<String>, val medians: List<List<Pair<Float, Float>>>)
 
-class ContentStore private constructor(private val db: SQLiteDatabase) {
+/** A bilingual example sentence (Tatoeba). */
+data class Sentence(val zh: String, val en: String)
+
+class ContentStore private constructor(
+    private val db: SQLiteDatabase,
+    /** Optional Tatoeba example-sentence bank; null when the asset isn't bundled. */
+    private val sentencesDb: SQLiteDatabase?,
+) {
 
     // ── dictionary ──────────────────────────────────────────────────────
     fun lookupWord(word: String): DictEntry? = db.rawQuery(
@@ -130,6 +137,20 @@ class ContentStore private constructor(private val db: SQLiteDatabase) {
         "SELECT DISTINCT simplified FROM dict_entry WHERE length(simplified)>1", null
     ).use { c -> HashSet<String>(120_000).apply { while (c.moveToNext()) add(c.getString(0)) } }
 
+    // ── example sentences (optional Tatoeba bank) ───────────────────────
+    /** Bilingual example sentences containing [word]; shortest first. Empty if no bank. */
+    fun examples(word: String, limit: Int = 4): List<Sentence> {
+        val sdb = sentencesDb ?: return emptyList()
+        if (word.isBlank() || word.none { it.code in 0x4E00..0x9FFF }) return emptyList()
+        val like = "%" + word.replace("%", "").replace("_", "") + "%"
+        return runCatching {
+            sdb.rawQuery(
+                "SELECT zh,en FROM sentence WHERE zh LIKE ? ORDER BY n LIMIT ?",
+                arrayOf(like, limit.toString())
+            ).use { c -> buildList { while (c.moveToNext()) add(Sentence(c.getString(0), c.getString(1))) } }
+        }.getOrDefault(emptyList())
+    }
+
     fun meta(key: String): String? = db.rawQuery(
         "SELECT value FROM meta WHERE key=?", arrayOf(key)
     ).use { if (it.moveToFirst()) it.getString(0) else null }
@@ -148,16 +169,36 @@ class ContentStore private constructor(private val db: SQLiteDatabase) {
         fun get(context: Context): ContentStore = INSTANCE ?: synchronized(this) {
             INSTANCE ?: open(context.applicationContext).also { INSTANCE = it }
         }
-        private const val DB_VERSION = 2   // bump whenever assets/content.db changes
+        private const val DB_VERSION = 2          // bump whenever assets/content.db changes
+        private const val SENTENCES_VERSION = 1   // bump whenever assets/sentences.db changes
         private fun open(context: Context): ContentStore {
-            val out = File(context.filesDir, "content.db")
-            val marker = File(context.filesDir, "content.db.version")
+            val main = copyAsset(context, "content.db", DB_VERSION)
+                ?: error("content.db missing from assets")
+            val sentences = copyAsset(context, "sentences.db", SENTENCES_VERSION)
+            return ContentStore(
+                SQLiteDatabase.openDatabase(main.path, null, SQLiteDatabase.OPEN_READONLY),
+                sentences?.let {
+                    runCatching { SQLiteDatabase.openDatabase(it.path, null, SQLiteDatabase.OPEN_READONLY) }.getOrNull()
+                },
+            )
+        }
+
+        /** Copy a bundled DB out of assets on first run / version bump. Returns null (rather
+            than throwing) if the asset isn't present, so optional banks degrade gracefully. */
+        private fun copyAsset(context: Context, name: String, version: Int): File? {
+            val out = File(context.filesDir, name)
+            val marker = File(context.filesDir, "$name.version")
             val current = if (marker.exists()) marker.readText().trim() else ""
-            if (!out.exists() || out.length() == 0L || current != DB_VERSION.toString()) {
-                context.assets.open("content.db").use { input -> out.outputStream().use { input.copyTo(it) } }
-                marker.writeText(DB_VERSION.toString())
+            if (!out.exists() || out.length() == 0L || current != version.toString()) {
+                return try {
+                    context.assets.open(name).use { input -> out.outputStream().use { input.copyTo(it) } }
+                    marker.writeText(version.toString())
+                    out
+                } catch (e: java.io.FileNotFoundException) {
+                    null
+                }
             }
-            return ContentStore(SQLiteDatabase.openDatabase(out.path, null, SQLiteDatabase.OPEN_READONLY))
+            return out
         }
     }
 }

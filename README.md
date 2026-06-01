@@ -112,7 +112,11 @@ python build_content_db.py
 | [Make Me a Hanzi](https://github.com/skishore/makemeahanzi) | Arphic Public License | decomposition, radicals, stroke data |
 | [complete-hsk-vocabulary](https://github.com/drkameleon/complete-hsk-vocabulary) | MIT | HSK 2.0 + 3.0 levels and meanings |
 | [wordfreq](https://github.com/rspeer/wordfreq) | MIT | frequency ordering and reading coverage |
+| [Tatoeba](https://tatoeba.org/) | CC BY 2.0 FR | 64,658 translated example sentences (`sentences.db`) |
 | 214 Kangxi radicals | curated | radical meanings for the components lessons |
+
+The example-sentence bank ships as a *separate* `app/src/main/assets/sentences.db` (~5 MB) so
+the main `content.db` is never touched. Rebuild it with `python data-build/build_sentences_db.py`.
 
 ## Project structure
 
@@ -120,6 +124,7 @@ python build_content_db.py
 .
 ├─ app/src/main/
 │  ├─ assets/content.db              # bundled dictionary / characters / strokes / HSK / genre
+│  ├─ assets/sentences.db            # Tatoeba translated example sentences (separate, optional)
 │  ├─ java/com/scholar/app/
 │  │  ├─ data/content/               # read-only content DB + pinyin conversion
 │  │  ├─ data/segment/               # maximal-match word segmenter

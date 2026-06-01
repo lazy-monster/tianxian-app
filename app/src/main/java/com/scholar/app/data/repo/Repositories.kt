@@ -33,6 +33,7 @@ class DictionaryRepository(private val content: ContentStore) {
     fun components(ch: String) = content.components(ch)
     fun charactersWithRadical(radical: String) = content.charactersWithRadical(radical)
     fun hskWords(levelKey: String, limit: Int = 200) = content.hskWords(levelKey, limit)
+    fun examples(word: String, limit: Int = 4) = content.examples(word, limit)
 }
 
 /* ── Known characters (drives "Characters Known") ───────────────────── */

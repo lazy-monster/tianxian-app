@@ -14,6 +14,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.asComposePath
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
@@ -98,7 +100,8 @@ fun WritingScreen(graph: AppGraph, ch: String, onBack: () -> Unit, onOpenChar: (
                                 moveTo(pts.first().x, pts.first().y)
                                 pts.drop(1).forEach { lineTo(it.x, it.y) }
                             }
-                            drawPath(path, color = x.cinnabar, style = Stroke(width = 14f))
+                            drawPath(path, color = x.cinnabar,
+                                style = Stroke(width = 26f, cap = StrokeCap.Round, join = StrokeJoin.Round))
                         }
                     }
                 }
@@ -116,9 +119,10 @@ fun WritingScreen(graph: AppGraph, ch: String, onBack: () -> Unit, onOpenChar: (
             }
             Spacer(Modifier.height(10.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                // Reset clears your tracing and replays the full animation from the start.
+                // Reset returns to a blank slate to practice on: no revealed strokes, no
+                // animation, no ink — just the faint guide. Replay is for the animation.
                 Pill("↺ Reset", x.surface2, Modifier.weight(1f)) {
-                    traces = emptyList(); current = emptyList(); shown = 0; playing = true
+                    playing = false; shown = 0; traces = emptyList(); current = emptyList()
                 }
                 Pill(if (playing) "▶ Playing…" else "▶ Replay", x.cinnabar, Modifier.weight(1f), white = true) {
                     if (!playing) { traces = emptyList(); current = emptyList(); playing = true }

@@ -11,3 +11,4 @@ captures/
 data-build/mmah_dictionary.txt
 data-build/hsk_complete.json
 data-build/__pycache__/
+data-build/.tatoeba/
