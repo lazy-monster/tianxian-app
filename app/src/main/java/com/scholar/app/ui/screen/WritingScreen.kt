@@ -29,23 +29,38 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
+private const val STROKE_MS = 750L   // a bit slower than before, easier to follow
+
 /* Make Me a Hanzi stroke data lives in a 1024×1024, y-up coordinate system; the
    documented render transform is matrix(1,0,0,-1,0,900). We scale that to the canvas. */
 @Composable
-fun WritingScreen(graph: AppGraph, ch: String, onBack: () -> Unit) {
+fun WritingScreen(graph: AppGraph, ch: String, onBack: () -> Unit, onOpenChar: (String) -> Unit) {
     val x = Theme.x
     var data by remember { mutableStateOf<StrokeData?>(null) }
     var shown by remember { mutableStateOf(0) }          // strokes revealed (animation)
+    var playing by remember { mutableStateOf(false) }    // auto-animation running
     var traces by remember { mutableStateOf<List<List<Offset>>>(emptyList()) }
     var current by remember { mutableStateOf<List<Offset>>(emptyList()) }
 
+    // Load the character, then play the whole stroke order automatically on open.
     LaunchedEffect(ch) {
+        shown = 0; traces = emptyList(); current = emptyList()
         data = withContext(Dispatchers.IO) { graph.dictionary.strokeData(ch) }
-        shown = data?.strokes?.size ?: 0
+        if (data != null) playing = true
+    }
+
+    // The animation driver: reveal strokes one at a time while `playing`.
+    LaunchedEffect(playing, data) {
+        val total = data?.strokes?.size ?: 0
+        if (playing && total > 0) {
+            shown = 0
+            for (i in 1..total) { delay(STROKE_MS); shown = i }
+            playing = false
+        }
     }
 
     Column(Modifier.fillMaxSize().background(x.bg).padding(horizontal = 22.dp)) {
-        ScreenHeader("Handwriting", "Watch the stroke order, then trace it with your finger. Correct order is the key to fast, legible writing.", onBack)
+        ScreenHeader("Handwriting", "Watch the stroke order play through, then trace it with your finger. Correct order is the key to fast, legible writing.", onBack)
 
         val d = data
         if (d == null) {
@@ -90,33 +105,30 @@ fun WritingScreen(graph: AppGraph, ch: String, onBack: () -> Unit) {
             }
 
             Spacer(Modifier.height(10.dp))
-            Text("Stroke ${shown.coerceAtMost(d.strokes.size)} of ${d.strokes.size}", color = x.textFaint, fontSize = 12.sp)
+            Text(if (playing) "Playing… stroke ${shown.coerceAtMost(d.strokes.size)} of ${d.strokes.size}"
+                else "Stroke ${shown.coerceAtMost(d.strokes.size)} of ${d.strokes.size}",
+                color = x.textFaint, fontSize = 12.sp)
             Spacer(Modifier.height(12.dp))
+            // Manual stepping takes over from the auto-play.
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Pill("◁ Step", x.surface2, Modifier.weight(1f)) { if (shown > 0) shown-- }
-                Pill("Step ▷", x.surface2, Modifier.weight(1f)) { if (shown < d.strokes.size) shown++ }
-                Pill("↺ Clear", x.surface2, Modifier.weight(1f)) { traces = emptyList(); current = emptyList() }
+                Pill("◁ Step", x.surface2, Modifier.weight(1f)) { playing = false; if (shown > 0) shown-- }
+                Pill("Step ▷", x.surface2, Modifier.weight(1f)) { playing = false; if (shown < d.strokes.size) shown++ }
             }
             Spacer(Modifier.height(10.dp))
-            AnimateButton(onReplay = { shown = 0 }, total = d.strokes.size, shown = shown, onTick = { shown = it })
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                // Reset clears your tracing and replays the full animation from the start.
+                Pill("↺ Reset", x.surface2, Modifier.weight(1f)) {
+                    traces = emptyList(); current = emptyList(); shown = 0; playing = true
+                }
+                Pill(if (playing) "▶ Playing…" else "▶ Replay", x.cinnabar, Modifier.weight(1f), white = true) {
+                    if (!playing) { traces = emptyList(); current = emptyList(); playing = true }
+                }
+            }
+            Spacer(Modifier.height(14.dp))
+            Text("View character details ›", color = x.jade, fontSize = 14.sp,
+                modifier = Modifier.clickable { onOpenChar(ch) })
         }
         Spacer(Modifier.height(20.dp))
-    }
-}
-
-@Composable
-private fun AnimateButton(onReplay: () -> Unit, total: Int, shown: Int, onTick: (Int) -> Unit) {
-    val x = Theme.x
-    var playing by remember { mutableStateOf(false) }
-    LaunchedEffect(playing) {
-        if (playing) {
-            onTick(0)
-            for (i in 1..total) { delay(550); onTick(i) }
-            playing = false
-        }
-    }
-    Pill(if (playing) "▶ Playing…" else "▶ Animate stroke order", x.cinnabar, Modifier.fillMaxWidth(), white = true) {
-        if (!playing) playing = true
     }
 }
 

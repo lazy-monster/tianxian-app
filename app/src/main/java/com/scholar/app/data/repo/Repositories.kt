@@ -11,6 +11,7 @@ import com.scholar.app.data.user.*
 import com.scholar.app.model.BookDocument
 import com.scholar.app.reader.ingest.Ingestor
 import com.scholar.app.srs.CardType
+import com.scholar.app.srs.Fsrs6
 import com.scholar.app.srs.Rating
 import com.scholar.app.srs.Scheduler
 import kotlinx.coroutines.Dispatchers
@@ -55,13 +56,22 @@ class CardRepository(
     private val cardDao: CardDao,
     private val logDao: ReviewLogDao,
     private val known: KnownRepository,
-    private val scheduler: Scheduler = Scheduler(),
+    /** Pulls the live desired-retention from settings so the slider takes effect without a
+        restart; a fresh Scheduler is cheap to build per scheduling call. */
+    private val retention: () -> Double = { 0.92 },
 ) {
+    private fun scheduler() = Scheduler(Fsrs6(desiredRetention = retention().coerceIn(0.80, 0.97)))
+
     fun dueCountFlow(): Flow<Int> = cardDao.dueCountFlow(System.currentTimeMillis())
     fun totalFlow(): Flow<Int> = cardDao.totalFlow()
     fun masteredCountFlow(): Flow<Int> = cardDao.masteredCountFlow()
     fun genreLearnedCountFlow(): Flow<Int> = cardDao.genreLearnedCountFlow()
     suspend fun due(limit: Int = 200): List<CardEntity> = cardDao.due(System.currentTimeMillis(), limit)
+
+    /** Of [fronts], the subset already present in the deck — lets the level lists show what's
+        been mined and figure out the "next batch". */
+    suspend fun minedAmong(fronts: List<String>): Set<String> =
+        if (fronts.isEmpty()) emptySet() else cardDao.existingFronts(fronts).toHashSet()
 
     /** One-tap mining from the reader/dictionary. */
     suspend fun mine(front: String, back: String, type: CardType, source: String?) {
@@ -75,13 +85,13 @@ class CardRepository(
         )
     }
 
-    fun project(card: CardEntity) = scheduler.project(
-        card.stability, card.difficulty, elapsedDays(card), isNew = card.reps == 0,
+    fun project(card: CardEntity) = scheduler().project(
+        card.stability, card.difficulty, elapsedDays(card), reps = card.reps,
     )
 
     suspend fun grade(card: CardEntity, rating: Rating) {
         val now = System.currentTimeMillis()
-        val res = scheduler.apply(card.stability, card.difficulty, elapsedDays(card), card.reps == 0, rating)
+        val res = scheduler().apply(card.stability, card.difficulty, elapsedDays(card), card.reps, rating)
         val dueMillis = now + (res.intervalDays * 86_400_000L).toLong()
         cardDao.update(
             card.copy(

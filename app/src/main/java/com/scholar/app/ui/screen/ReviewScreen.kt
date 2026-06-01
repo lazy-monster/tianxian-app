@@ -22,7 +22,7 @@ import com.scholar.app.ui.theme.Theme
 import kotlinx.coroutines.launch
 
 @Composable
-fun ReviewScreen(graph: AppGraph) {
+fun ReviewScreen(graph: AppGraph, onOpenChar: (String) -> Unit = {}) {
     val x = Theme.x
     val scope = rememberCoroutineScope()
     var queue by remember { mutableStateOf<List<CardEntity>>(emptyList()) }
@@ -81,6 +81,12 @@ fun ReviewScreen(graph: AppGraph) {
                         modifier = Modifier.padding(horizontal = 24.dp))
                     Spacer(Modifier.height(12.dp))
                     Text("🔊", fontSize = 26.sp, modifier = Modifier.clickable { graph.speaker.speak(card.frontRef) })
+                    if (card.frontRef.any { it.code in 0x4E00..0x9FFF }) {
+                        Spacer(Modifier.height(14.dp))
+                        Text("study character", color = x.textFaint, fontSize = 11.sp, letterSpacing = 1.sp)
+                        Spacer(Modifier.height(4.dp))
+                        HanziLinks(card.frontRef, onOpenChar, fontSize = 22.sp, color = x.jade)
+                    }
                 } else {
                     Spacer(Modifier.height(18.dp))
                     Text("tap to reveal", color = x.textFaint, fontSize = 12.sp, letterSpacing = 2.sp)

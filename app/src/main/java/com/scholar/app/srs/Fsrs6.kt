@@ -52,15 +52,15 @@ class Fsrs6(
         return max(raw, 0.0)
     }
 
-    fun humanInterval(stability: Double): String {
-        val d = intervalDays(stability)
-        return when {
-            d < 1.0 / 24 -> "<1m"
-            d < 1.0 -> "${(d * 24).toInt().coerceAtLeast(1)}h"
-            d < 30 -> "${d.toInt().coerceAtLeast(1)}d"
-            d < 365 -> "${(d / 30).toInt()}mo"
-            else -> "${"%.1f".format(d / 365)}y"
-        }
+    fun humanInterval(stability: Double): String = formatDays(intervalDays(stability))
+
+    /** Format a raw interval in days as a compact Anki-style label ("10m", "3d", "2mo"). */
+    fun formatDays(d: Double): String = when {
+        d < 1.0 / 24 -> "<1m"
+        d < 1.0 -> "${(d * 24).toInt().coerceAtLeast(1)}h"
+        d < 30 -> "${d.toInt().coerceAtLeast(1)}d"
+        d < 365 -> "${(d / 30).toInt()}mo"
+        else -> "${"%.1f".format(d / 365)}y"
     }
 
     // --- internals ---

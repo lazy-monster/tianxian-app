@@ -66,6 +66,9 @@ interface CardDao {
     @Query("SELECT * FROM cards WHERE frontRef=:front AND type=:type LIMIT 1")
     suspend fun find(front: String, type: String): CardEntity?
 
+    @Query("SELECT frontRef FROM cards WHERE frontRef IN (:fronts)")
+    suspend fun existingFronts(fronts: List<String>): List<String>
+
     @Query("SELECT COUNT(*) FROM cards")
     fun totalFlow(): Flow<Int>
 
@@ -77,12 +80,22 @@ interface CardDao {
 
     @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insert(card: CardEntity): Long
     @Update suspend fun update(card: CardEntity)
+
+    // backup / restore
+    @Query("SELECT * FROM cards") suspend fun all(): List<CardEntity>
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertAll(cards: List<CardEntity>)
+    @Query("DELETE FROM cards") suspend fun clear()
 }
 
 @Dao
 interface ReviewLogDao {
     @Insert suspend fun insert(log: ReviewLogEntity)
     @Query("SELECT COUNT(*) FROM review_log WHERE reviewedAtMillis>=:since") suspend fun countSince(since: Long): Int
+
+    // backup / restore
+    @Query("SELECT * FROM review_log") suspend fun all(): List<ReviewLogEntity>
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertAll(logs: List<ReviewLogEntity>)
+    @Query("DELETE FROM review_log") suspend fun clear()
 }
 
 @Dao
@@ -94,6 +107,11 @@ interface KnownDao {
     suspend fun knownChars(threshold: Double = 0.6): List<String>
 
     @Upsert suspend fun upsert(known: KnownCharEntity)
+
+    // backup / restore
+    @Query("SELECT * FROM known_chars") suspend fun all(): List<KnownCharEntity>
+    @Upsert suspend fun upsertAll(chars: List<KnownCharEntity>)
+    @Query("DELETE FROM known_chars") suspend fun clear()
 }
 
 @Dao
@@ -102,6 +120,10 @@ interface BookDao {
     @Query("SELECT * FROM books WHERE id=:id") suspend fun get(id: String): BookEntity?
     @Upsert suspend fun upsert(book: BookEntity)
     @Delete suspend fun delete(book: BookEntity)
+
+    // backup / restore (metadata only — book files are device-local)
+    @Query("SELECT * FROM books") suspend fun all(): List<BookEntity>
+    @Upsert suspend fun upsertAll(books: List<BookEntity>)
 }
 
 @Database(

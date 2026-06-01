@@ -40,7 +40,7 @@ private val CATEGORY = linkedMapOf(
 private data class Term(val t: GenreTerm, val freq: Int?)
 
 @Composable
-fun CultivationScreen(graph: AppGraph, onBack: () -> Unit) {
+fun CultivationScreen(graph: AppGraph, onBack: () -> Unit, onOpenChar: (String) -> Unit = {}) {
     val x = Theme.x
     val scope = rememberCoroutineScope()
 
@@ -143,7 +143,7 @@ fun CultivationScreen(graph: AppGraph, onBack: () -> Unit) {
                     Spacer(Modifier.height(4.dp))
                 }
                 items(list) { tw ->
-                    TermRow(tw.t, onHear = { graph.speaker.speak(tw.t.word) },
+                    TermRow(tw.t, onOpenChar = onOpenChar, onHear = { graph.speaker.speak(tw.t.word) },
                         onMine = { scope.launch { graph.cards.mine(tw.t.word, "${tw.t.pinyin} · ${tw.t.gloss}", CardType.WORD_RECOGNITION, "Genre: $key") } })
                 }
             }
@@ -197,13 +197,14 @@ private fun RealmRow(hanzi: String, name: String, note: String, entry: Int, atta
 }
 
 @Composable
-private fun TermRow(t: GenreTerm, onHear: () -> Unit, onMine: () -> Unit) {
+private fun TermRow(t: GenreTerm, onOpenChar: (String) -> Unit, onHear: () -> Unit, onMine: () -> Unit) {
     val x = Theme.x
     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(x.surface).padding(12.dp),
         verticalAlignment = Alignment.CenterVertically) {
-        Text(t.word, fontFamily = SerifSC, fontWeight = FontWeight.SemiBold, fontSize = 20.sp, color = x.text,
-            modifier = Modifier.clickable { onHear() })
-        Spacer(Modifier.width(12.dp))
+        HanziLinks(t.word, onOpenChar, fontSize = 20.sp, color = x.text, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.width(8.dp))
+        Text("🔊", fontSize = 14.sp, modifier = Modifier.clickable { onHear() })
+        Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
             Text(t.pinyin, color = x.gold, fontSize = 14.sp)
             Text(t.gloss, color = x.textSoft, fontSize = 13.sp, lineHeight = 18.sp)

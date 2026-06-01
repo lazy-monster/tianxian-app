@@ -35,20 +35,29 @@ fun ScholarRoot(graph: AppGraph, dark: Boolean, onToggleTheme: () -> Unit) {
     val nav = rememberNavController()
     val x = Theme.x
     val current = nav.currentBackStackEntryAsState().value?.destination
-    val showBar = TABS.any { tab -> current?.hierarchy?.any { it.route == tab.route } == true }
+    val route = current?.route
+    // Keep the tab bar (so Home is always one tap away) on the top-level tabs and on the
+    // Learn sub-screens; hide it only on the immersive full-screen flows.
+    val onTab = TABS.any { tab -> current?.hierarchy?.any { it.route == tab.route } == true }
+    val showBar = onTab || route?.startsWith("learn/") == true
 
     Scaffold(
         containerColor = x.bg,
         bottomBar = {
             if (showBar) NavigationBar(containerColor = x.bg2, tonalElevation = 0.dp) {
                 TABS.forEach { tab ->
-                    val selected = current?.hierarchy?.any { it.route == tab.route } == true
+                    val selected = current?.hierarchy?.any { it.route == tab.route } == true ||
+                        (tab.route == "learn" && route?.startsWith("learn/") == true)
                     NavigationBarItem(
                         selected = selected,
                         onClick = {
-                            nav.navigate(tab.route) {
-                                popUpTo(nav.graph.findStartDestination().id) { saveState = true }
-                                launchSingleTop = true; restoreState = true
+                            // Pop back to Home (the start destination) so every tab — Home
+                            // included — is reliably reachable. The old saveState/restoreState
+                            // pair is what made the Home tab silently do nothing from Learn.
+                            // Re-tapping a Learn sub-screen returns to the Learn root.
+                            if (route != tab.route) nav.navigate(tab.route) {
+                                popUpTo(nav.graph.findStartDestination().id) { inclusive = false }
+                                launchSingleTop = true
                             }
                         },
                         icon = { Icon(tab.icon, tab.label) },
@@ -75,15 +84,17 @@ fun ScholarRoot(graph: AppGraph, dark: Boolean, onToggleTheme: () -> Unit) {
             composable("learn/pinyin") { PinyinScreen(graph, onBack = { nav.popBackStack() }) }
             composable("learn/radicals") { RadicalsScreen(graph, onBack = { nav.popBackStack() },
                 onOpenChar = { ch -> nav.navigate("char/$ch") }) }
-            composable("learn/levels") { LevelsScreen(graph, onBack = { nav.popBackStack() }) }
-            composable("learn/cultivation") { CultivationScreen(graph, onBack = { nav.popBackStack() }) }
+            composable("learn/levels") { LevelsScreen(graph, onBack = { nav.popBackStack() },
+                onOpenChar = { ch -> nav.navigate("char/$ch") }) }
+            composable("learn/cultivation") { CultivationScreen(graph, onBack = { nav.popBackStack() },
+                onOpenChar = { ch -> nav.navigate("char/$ch") }) }
             composable("learn/writing") { WritingPickerScreen(graph, onBack = { nav.popBackStack() },
                 onPractice = { ch -> nav.navigate("writing/$ch") }) }
 
             composable("read") { LibraryScreen(graph, onOpenBook = { id -> nav.navigate("reader/$id") }) }
-            composable("review") { ReviewScreen(graph) }
+            composable("review") { ReviewScreen(graph, onOpenChar = { ch -> nav.navigate("char/$ch") }) }
             composable("dict") { DictionaryScreen(graph, onOpenChar = { ch -> nav.navigate("char/$ch") }) }
-            composable("settings") { SettingsScreen(dark, onToggleTheme, onBack = { nav.popBackStack() }) }
+            composable("settings") { SettingsScreen(graph, dark, onToggleTheme, onBack = { nav.popBackStack() }) }
 
             composable("reader/{id}") { e ->
                 ReaderScreen(graph, bookId = e.arguments?.getString("id").orEmpty(),
@@ -95,7 +106,8 @@ fun ScholarRoot(graph: AppGraph, dark: Boolean, onToggleTheme: () -> Unit) {
                     onOpenChar = { ch -> nav.navigate("char/$ch") })
             }
             composable("writing/{ch}") { e ->
-                WritingScreen(graph, ch = e.arguments?.getString("ch").orEmpty(), onBack = { nav.popBackStack() })
+                WritingScreen(graph, ch = e.arguments?.getString("ch").orEmpty(),
+                    onBack = { nav.popBackStack() }, onOpenChar = { ch -> nav.navigate("char/$ch") })
             }
         }
     }

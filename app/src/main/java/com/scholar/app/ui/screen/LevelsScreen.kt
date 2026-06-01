@@ -20,11 +20,12 @@ import androidx.compose.ui.unit.sp
 import com.scholar.app.data.content.HskWord
 import com.scholar.app.di.AppGraph
 import com.scholar.app.srs.CardType
-import com.scholar.app.ui.theme.SerifSC
 import com.scholar.app.ui.theme.Theme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+private const val BATCH = 40
 
 private val LEVELS = listOf(
     "new-1" to "HSK 1", "new-2" to "HSK 2", "new-3" to "HSK 3", "new-4" to "HSK 4",
@@ -32,23 +33,38 @@ private val LEVELS = listOf(
 )
 
 @Composable
-fun LevelsScreen(graph: AppGraph, onBack: () -> Unit) {
+fun LevelsScreen(graph: AppGraph, onBack: () -> Unit, onOpenChar: (String) -> Unit) {
     val x = Theme.x
     val scope = rememberCoroutineScope()
     var level by remember { mutableStateOf("new-1") }
     var words by remember { mutableStateOf<List<HskWord>>(emptyList()) }
     val mined = remember { mutableStateMapOf<String, Boolean>() }
-    var addedAll by remember { mutableStateOf(false) }
+    var adding by remember { mutableStateOf(false) }
 
+    // (Re)load the level, then sync which of its words are already in the deck so the counts
+    // and the "add next N" button survive app restarts and reflect reality.
     LaunchedEffect(level) {
-        addedAll = false
-        words = withContext(Dispatchers.IO) { graph.dictionary.hskWords(level, 300) }
+        val loaded = withContext(Dispatchers.IO) { graph.dictionary.hskWords(level, 300) }
+        val already = withContext(Dispatchers.IO) { graph.cards.minedAmong(loaded.map { it.word }) }
+        words = loaded
+        mined.clear()
+        already.forEach { mined[it] = true }
     }
+
+    suspend fun add(word: HskWord) {
+        graph.cards.mine(word.word, "${word.pinyin} · ${word.meaning}",
+            if (word.word.length == 1) CardType.CHAR_RECOGNITION else CardType.WORD_RECOGNITION, "HSK $level")
+        mined[word.word] = true
+    }
+
+    val minedCount = words.count { mined[it.word] == true }
+    val remaining = words.size - minedCount
+    val nextBatch = (remaining).coerceAtMost(BATCH)
 
     LazyColumn(Modifier.fillMaxSize().background(x.bg).padding(horizontal = 22.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item {
-            ScreenHeader("Vocabulary by Level", "Words ordered by real-world frequency. Mine a few each day; the most useful come first.", onBack)
+            ScreenHeader("Vocabulary by Level", "Words ordered by real-world frequency. Mine a few each day; the most useful come first. Tap any character to study it in depth.", onBack)
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 LEVELS.forEach { (key, label) ->
                     val sel = key == level
@@ -60,19 +76,34 @@ fun LevelsScreen(graph: AppGraph, onBack: () -> Unit) {
                 }
             }
             Spacer(Modifier.height(8.dp))
-            Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(x.surface2)
-                .clickable {
-                    if (!addedAll) scope.launch {
-                        words.take(40).forEach { w ->
-                            graph.cards.mine(w.word, "${w.pinyin} · ${w.meaning}",
-                                if (w.word.length == 1) CardType.CHAR_RECOGNITION else CardType.WORD_RECOGNITION, "HSK ${level}")
-                            mined[w.word] = true
-                        }
-                        addedAll = true
+            // progress through the level's deck-able words
+            if (words.isNotEmpty()) {
+                Box(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(6.dp)).background(x.surface)) {
+                    Box(Modifier.fillMaxWidth(minedCount.toFloat() / words.size).fillMaxHeight()
+                        .clip(RoundedCornerShape(6.dp)).background(x.jade))
+                }
+                Spacer(Modifier.height(6.dp))
+                Text("$minedCount of ${words.size} in your deck", color = x.textFaint, fontSize = 12.sp)
+                Spacer(Modifier.height(8.dp))
+            }
+            val enabled = nextBatch > 0 && !adding
+            Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
+                .background(if (enabled) x.surface2 else x.surface)
+                .clickable(enabled = enabled) {
+                    adding = true
+                    scope.launch {
+                        words.filter { mined[it.word] != true }.take(BATCH).forEach { add(it) }
+                        adding = false
                     }
                 }.padding(13.dp), contentAlignment = Alignment.Center) {
-                Text(if (addedAll) "✓ Added the first 40 to your deck" else "+ Study this level (add first 40)",
-                    color = x.text, fontWeight = FontWeight.Medium, fontSize = 14.sp)
+                Text(
+                    when {
+                        adding -> "Adding…"
+                        remaining == 0 -> "✓ Whole level is in your deck"
+                        minedCount == 0 -> "+ Study this level (add first $nextBatch)"
+                        else -> "+ Add next $nextBatch to deck"
+                    },
+                    color = if (enabled) x.text else x.textSoft, fontWeight = FontWeight.Medium, fontSize = 14.sp)
             }
             Spacer(Modifier.height(4.dp))
         }
@@ -80,21 +111,17 @@ fun LevelsScreen(graph: AppGraph, onBack: () -> Unit) {
             val isMined = mined[w.word] == true
             Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(x.surface).padding(14.dp),
                 verticalAlignment = Alignment.CenterVertically) {
-                Text(w.word, fontFamily = SerifSC, fontSize = 26.sp, color = x.text,
-                    modifier = Modifier.clickable { graph.speaker.speak(w.word) })
-                Spacer(Modifier.width(14.dp))
+                HanziLinks(w.word, onOpenChar, fontSize = 26.sp, color = x.text)
+                Spacer(Modifier.width(10.dp))
+                Text("🔊", fontSize = 16.sp, modifier = Modifier.clickable { graph.speaker.speak(w.word) })
+                Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text(w.pinyin, color = x.gold, fontSize = 14.sp)
                     Text(w.meaning, color = x.textSoft, fontSize = 13.sp, lineHeight = 18.sp, maxLines = 2)
                 }
                 Box(Modifier.clip(RoundedCornerShape(10.dp)).background(if (isMined) x.surface2 else x.cinnabar)
-                    .clickable {
-                        if (!isMined) scope.launch {
-                            graph.cards.mine(w.word, "${w.pinyin} · ${w.meaning}",
-                                if (w.word.length == 1) CardType.CHAR_RECOGNITION else CardType.WORD_RECOGNITION, "HSK ${level}")
-                            mined[w.word] = true
-                        }
-                    }.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                    .clickable(enabled = !isMined) { scope.launch { add(w) } }
+                    .padding(horizontal = 12.dp, vertical = 8.dp)) {
                     Text(if (isMined) "✓" else "+", color = if (isMined) x.jade else Color.White, fontWeight = FontWeight.Bold)
                 }
             }
