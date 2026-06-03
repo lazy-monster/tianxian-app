@@ -12,9 +12,11 @@ import com.google.mlkit.vision.text.chinese.ChineseTextRecognizerOptions
 import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
 import com.tom_roush.pdfbox.pdmodel.PDDocument
 import com.tom_roush.pdfbox.text.PDFTextStripper
+import com.scholar.app.model.Block
 import com.scholar.app.model.BookDocument
 import com.scholar.app.model.BookFormat
 import com.scholar.app.model.Chapter
+import com.scholar.app.model.ImageBlock
 import com.scholar.app.model.TextBlock
 import java.io.File
 import java.util.UUID
@@ -54,13 +56,19 @@ class Ocr(private val context: Context) {
     private val recognizer = TextRecognition.getClient(ChineseTextRecognizerOptions.Builder().build())
 
     fun parseImage(file: File, title: String): BookDocument {
+        val id = UUID.randomUUID().toString()
         val bmp = android.graphics.BitmapFactory.decodeFile(file.path) ?: error("Could not read image")
-        val blocks = recognize(bmp)
-        return BookDocument(UUID.randomUUID().toString(), title, null, BookFormat.IMAGES,
-            listOf(Chapter(0, null, blocks.map { TextBlock(it) })))
+        // keep the original page image, then OCR its text so words stay tappable below it
+        val ext = file.extension.ifBlank { "jpg" }.lowercase().take(4)
+        val name = ImageStore.saveBytes(context, id, "page_0000.$ext", file.readBytes())
+        val blocks = ArrayList<Block>()
+        blocks.add(ImageBlock(name))
+        recognize(bmp).forEach { blocks.add(TextBlock(it)) }
+        return BookDocument(id, title, null, BookFormat.IMAGES, listOf(Chapter(0, null, blocks)))
     }
 
     fun parsePdf(file: File, title: String): BookDocument {
+        val id = UUID.randomUUID().toString()
         val chapters = ArrayList<Chapter>()
         ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY).use { pfd ->
             PdfRenderer(pfd).use { renderer ->
@@ -70,15 +78,18 @@ class Ocr(private val context: Context) {
                         val bmp = Bitmap.createBitmap(page.width * scale, page.height * scale, Bitmap.Config.ARGB_8888)
                         bmp.eraseColor(Color.WHITE)
                         page.render(bmp, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-                        val blocks = recognize(bmp)
-                        if (blocks.isNotEmpty())
-                            chapters.add(Chapter(chapters.size, "Page ${i + 1}", blocks.map { TextBlock(it) }))
+                        // render the page as an image, then OCR it for tappable text underneath
+                        val name = ImageStore.saveBitmap(context, id, "page_%04d.jpg".format(i), bmp)
+                        val blocks = ArrayList<Block>()
+                        blocks.add(ImageBlock(name))
+                        recognize(bmp).forEach { blocks.add(TextBlock(it)) }
+                        chapters.add(Chapter(chapters.size, "Page ${i + 1}", blocks))
                     }
                 }
             }
         }
-        if (chapters.isEmpty()) error("Could not OCR any text from this PDF")
-        return BookDocument(UUID.randomUUID().toString(), title, null, BookFormat.PDF_SCANNED, chapters)
+        if (chapters.isEmpty()) error("Could not render any pages from this PDF")
+        return BookDocument(id, title, null, BookFormat.PDF_SCANNED, chapters)
     }
 
     private fun recognize(bmp: Bitmap): List<String> {

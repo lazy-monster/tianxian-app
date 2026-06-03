@@ -24,6 +24,31 @@ class SettingsStore(context: Context) {
         get() = prefs.getInt("hsk_batch_size", 40)
         set(v) = prefs.edit().putInt("hsk_batch_size", v.coerceIn(5, 100)).apply()
 
+    // ── Reader preferences (global defaults applied in the reader) ──────────
+    /** Reader font family key: serif | sans | kai | mono. */
+    var readerFontKey: String
+        get() = prefs.getString("reader_font", "serif") ?: "serif"
+        set(v) = prefs.edit().putString("reader_font", v).apply()
+
+    var readerFontSizeSp: Int
+        get() = prefs.getInt("reader_font_size", 21)
+        set(v) = prefs.edit().putInt("reader_font_size", v.coerceIn(16, 34)).apply()
+
+    /** Line-height as a multiple of the font size. */
+    var readerLineHeight: Float
+        get() = prefs.getFloat("reader_line_height", 1.9f)
+        set(v) = prefs.edit().putFloat("reader_line_height", v.coerceIn(1.4f, 2.4f)).apply()
+
+    /** Reader colour theme key: follow (app theme) | ink | paper | sepia | oled. */
+    var readerThemeKey: String
+        get() = prefs.getString("reader_theme", "follow") ?: "follow"
+        set(v) = prefs.edit().putString("reader_theme", v).apply()
+
+    /** Read-aloud speech rate (1.0 = normal). */
+    var readerTtsRate: Float
+        get() = prefs.getFloat("reader_tts_rate", 1.0f)
+        set(v) = prefs.edit().putFloat("reader_tts_rate", v.coerceIn(0.5f, 1.6f)).apply()
+
     /** Persisted SAF tree-uri of the chosen auto-backup folder, or null if unset. */
     var backupTreeUri: String?
         get() = prefs.getString("backup_tree_uri", null)

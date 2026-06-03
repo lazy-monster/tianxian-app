@@ -9,7 +9,9 @@ import com.scholar.app.data.content.GenreTerm
 import com.scholar.app.data.content.Pinyin
 import com.scholar.app.data.user.*
 import com.scholar.app.model.BookDocument
+import com.scholar.app.model.ReadingPosition
 import com.scholar.app.reader.ingest.Ingestor
+import com.scholar.app.reader.ingest.ImageStore
 import com.scholar.app.srs.CardType
 import com.scholar.app.srs.Fsrs6
 import com.scholar.app.srs.Rating
@@ -148,6 +150,18 @@ class BookRepository(
 
     suspend fun savePosition(id: String, chapter: Int, block: Int) {
         bookDao.get(id)?.let { bookDao.upsert(it.copy(posChapter = chapter, posBlock = block)) }
+    }
+
+    /** Where the reader should resume this book (defaults to the start for new/unknown books). */
+    suspend fun position(id: String): ReadingPosition =
+        bookDao.get(id)?.let { ReadingPosition(it.posChapter, it.posBlock) } ?: ReadingPosition(0, 0)
+
+    /** Remove a book entirely: its row, cached text, and any page images. */
+    suspend fun delete(id: String) {
+        val e = bookDao.get(id) ?: return
+        runCatching { File(e.cachePath).delete() }
+        ImageStore.delete(context, id)
+        bookDao.delete(e)
     }
 
     /** Fraction of Han-character occurrences in the book the user already knows. */

@@ -10,9 +10,11 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
+import com.scholar.app.R
 
 /* Extended palette carried alongside Material's scheme (jade/gold/cinnabar). */
 @Immutable
@@ -42,6 +44,29 @@ val LocalXColors = staticCompositionLocalOf { DarkX }
 val SerifSC = FontFamily.Serif
 val SansSC = FontFamily.SansSerif
 val Brush = FontFamily.Serif   // placeholder for Ma Shan Zheng brush accent
+/** Bundled LXGW WenKai — an open (OFL) Kai/楷 face, the marquee custom reading font. */
+val KaiSC = FontFamily(Font(R.font.lxgw_wenkai))
+
+/** Reader font family for a stored preference key (serif | sans | kai | mono). */
+fun readerFont(key: String): FontFamily = when (key) {
+    "sans" -> SansSC
+    "kai" -> KaiSC
+    "mono" -> FontFamily.Monospace
+    else -> SerifSC
+}
+
+/** Colours for the reading surface — chosen independently of the app's dark/light theme. */
+@Immutable
+data class ReaderColors(val bg: Color, val text: Color, val textSoft: Color, val textFaint: Color)
+
+/** Resolve a reader theme key to its palette; "follow" mirrors the current app theme [x]. */
+fun readerPalette(key: String, x: XColors): ReaderColors = when (key) {
+    "ink" -> ReaderColors(Ink.bg, Ink.text, Ink.textSoft, Ink.textFaint)
+    "paper" -> ReaderColors(Paper.bg, Paper.text, Paper.textSoft, Paper.textFaint)
+    "sepia" -> ReaderColors(Color(0xFFF4ECD8), Color(0xFF5B4636), Color(0xFF7A6A52), Color(0xFFA8997D))
+    "oled" -> ReaderColors(Color(0xFF000000), Color(0xFFE8E2D6), Color(0xFFB9B2A4), Color(0xFF6F695C))
+    else -> ReaderColors(x.bg, x.text, x.textSoft, x.textFaint)
+}
 
 private val XTypography = Typography(
     displayLarge = TextStyle(fontFamily = SerifSC, fontWeight = FontWeight.SemiBold, fontSize = 64.sp),

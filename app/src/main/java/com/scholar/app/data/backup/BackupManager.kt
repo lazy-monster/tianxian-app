@@ -42,7 +42,12 @@ class BackupManager(
         root.put("settings", JSONObject()
             .put("darkTheme", settings.darkTheme)
             .put("desiredRetention", settings.desiredRetention.toDouble())
-            .put("hskBatchSize", settings.hskBatchSize))
+            .put("hskBatchSize", settings.hskBatchSize)
+            .put("readerFontKey", settings.readerFontKey)
+            .put("readerFontSizeSp", settings.readerFontSizeSp)
+            .put("readerLineHeight", settings.readerLineHeight.toDouble())
+            .put("readerThemeKey", settings.readerThemeKey)
+            .put("readerTtsRate", settings.readerTtsRate.toDouble()))
 
         root.put("cards", JSONArray().apply {
             db.cardDao().all().forEach { c ->
@@ -90,6 +95,11 @@ class BackupManager(
             if (s.has("darkTheme")) settings.darkTheme = s.getBoolean("darkTheme")
             if (s.has("desiredRetention")) settings.desiredRetention = s.getDouble("desiredRetention").toFloat()
             if (s.has("hskBatchSize")) settings.hskBatchSize = s.getInt("hskBatchSize")
+            if (s.has("readerFontKey")) settings.readerFontKey = s.getString("readerFontKey")
+            if (s.has("readerFontSizeSp")) settings.readerFontSizeSp = s.getInt("readerFontSizeSp")
+            if (s.has("readerLineHeight")) settings.readerLineHeight = s.getDouble("readerLineHeight").toFloat()
+            if (s.has("readerThemeKey")) settings.readerThemeKey = s.getString("readerThemeKey")
+            if (s.has("readerTtsRate")) settings.readerTtsRate = s.getDouble("readerTtsRate").toFloat()
         }
 
         val cards = root.optJSONArray("cards")?.mapObjects { o ->
@@ -148,7 +158,10 @@ class BackupManager(
         db.reviewLogDao().clear()
         db.knownDao().clear()
         if (includeBooks) {
-            db.bookDao().all().forEach { runCatching { java.io.File(it.cachePath).delete() } }
+            db.bookDao().all().forEach {
+                runCatching { java.io.File(it.cachePath).delete() }
+                com.scholar.app.reader.ingest.ImageStore.delete(context, it.id)
+            }
             db.bookDao().clear()
         }
         settings.lastBackupMillis = 0L

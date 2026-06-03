@@ -42,10 +42,15 @@ offline. No account, no subscription, no ads.
   a long climb where comfortable native-novel reading sits near the peak. The genre's
   signature vocabulary is folded in, ordered by difficulty.
 
-**A reader for your own books.** Import EPUB, TXT, MOBI, PDF, or a photo of a page. Tap any
-word for its reading and meaning, mine it into spaced repetition, or mark it known. Words
-you already know fade so your eye goes to what's new. Each book shows what percentage of
-its characters you can already read.
+**A reader for your own books.** Import EPUB, TXT, MOBI, PDF, CBZ comics, or a photo of a page.
+Tap any word for its reading and meaning, mine it into spaced repetition, or mark it known. Words
+you already know fade so your eye goes to what's new. Each book shows what percentage of its
+characters you can already read. The reader is fully customizable — choose font (serif, sans,
+Kai 楷, or mono), text size, line spacing, and a reading theme (app / ink / paper / sepia / black)
+— and it renders **images**, not just text: illustrated novels' inline pictures, scanned PDFs and
+photographed pages (with the OCR'd text still tappable beneath), and CBZ picture/comic books page by
+page. A **read-aloud** mode speaks the chapter with the current sentence highlighted, auto-scrolling
+and auto-advancing through chapters at an adjustable speed, and it resumes where you left off.
 
 **Spaced repetition done right.** A from-scratch implementation of **FSRS-6**, the modern
 scheduler that needs ~20–30% fewer reviews than classic SM-2 for the same retention.
@@ -53,8 +58,9 @@ scheduler that needs ~20–30% fewer reviews than classic SM-2 for the same rete
 **A dictionary that works.** 122,143 CC-CEDICT entries, searchable in Chinese, pinyin, or
 English, with tone-marked readings and on-device audio for any word.
 
-**Designed to be pleasant.** An "Ink & Jade" theme — ink-wash dark or rice-paper light —
-with a serif reader. See `xianxia-app-prototype.html` for the visual reference.
+**Designed to be pleasant.** An "Ink & Jade" theme — ink-wash dark or rice-paper light — with a
+serif reader and an optional bundled LXGW WenKai (霞鹜文楷) Kai brush-script reading font. See
+`xianxia-app-prototype.html` for the visual reference.
 
 ## Tech stack
 
@@ -116,6 +122,7 @@ python build_content_db.py
 | [complete-hsk-vocabulary](https://github.com/drkameleon/complete-hsk-vocabulary) | MIT | HSK 2.0 + 3.0 levels and meanings |
 | [wordfreq](https://github.com/rspeer/wordfreq) | MIT | frequency ordering and reading coverage |
 | [Tatoeba](https://tatoeba.org/) | CC BY 2.0 FR | 64,658 translated example sentences (`sentences.db`) |
+| [LXGW WenKai](https://github.com/lxgw/LxgwWenKaiGB) | SIL OFL 1.1 | bundled Kai reading font (`res/font/lxgw_wenkai.ttf`, subset to the app's character set; license in `third-party/`) |
 | 214 Kangxi radicals | curated | radical meanings (in `content.db`) and everyday teaching names (in `RadicalNames.kt`) for the components lessons |
 
 The example-sentence bank ships as a *separate* `app/src/main/assets/sentences.db` (~5 MB) so

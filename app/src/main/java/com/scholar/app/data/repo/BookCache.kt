@@ -1,8 +1,10 @@
 package com.scholar.app.data.repo
 
+import com.scholar.app.model.Block
 import com.scholar.app.model.BookDocument
 import com.scholar.app.model.Chapter
 import com.scholar.app.model.BookFormat
+import com.scholar.app.model.ImageBlock
 import com.scholar.app.model.TextBlock
 import org.json.JSONArray
 import org.json.JSONObject
@@ -20,7 +22,13 @@ object BookCache {
         val chapters = JSONArray()
         doc.chapters.forEach { ch ->
             val blocks = JSONArray()
-            ch.blocks.forEach { blocks.put(it.text) }
+            ch.blocks.forEach { b ->
+                when (b) {
+                    is TextBlock -> blocks.put(JSONObject().put("k", "t").put("v", b.text))
+                    is ImageBlock -> blocks.put(JSONObject().put("k", "i").put("v", b.file)
+                        .put("c", b.caption ?: JSONObject.NULL))
+                }
+            }
             chapters.put(JSONObject().put("i", ch.index).put("t", ch.title ?: JSONObject.NULL).put("b", blocks))
         }
         root.put("chapters", chapters)
@@ -38,8 +46,18 @@ object BookCache {
         for (i in 0 until arr.length()) {
             val c = arr.getJSONObject(i)
             val b = c.getJSONArray("b")
-            val blocks = ArrayList<TextBlock>(b.length())
-            for (j in 0 until b.length()) blocks.add(TextBlock(b.getString(j)))
+            val blocks = ArrayList<Block>(b.length())
+            for (j in 0 until b.length()) {
+                // new format: {k,v[,c]}; legacy format: a bare string == a text block
+                val obj = b.optJSONObject(j)
+                if (obj == null) {
+                    blocks.add(TextBlock(b.getString(j)))
+                } else if (obj.optString("k") == "i") {
+                    blocks.add(ImageBlock(obj.getString("v"), obj.optString("c").takeIf { it.isNotEmpty() }))
+                } else {
+                    blocks.add(TextBlock(obj.optString("v")))
+                }
+            }
             chapters.add(Chapter(c.getInt("i"), c.optString("t").takeIf { it.isNotEmpty() }, blocks))
         }
         val profile = HashMap<Char, Int>()

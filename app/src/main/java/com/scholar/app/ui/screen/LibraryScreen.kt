@@ -60,14 +60,15 @@ fun LibraryScreen(graph: AppGraph, onOpenBook: (String) -> Unit) {
                 .clickable(enabled = !importing) {
                     picker.launch(arrayOf(
                         "application/epub+zip", "application/pdf", "application/x-mobipocket-ebook",
-                        "text/plain", "image/*", "application/octet-stream",
+                        "text/plain", "image/*", "application/vnd.comicbook+zip", "application/zip",
+                        "application/octet-stream",
                     ))
                 }.padding(18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 if (importing) CircularProgressIndicator(color = androidx.compose.ui.graphics.Color.White, strokeWidth = 2.dp)
                 else Text("+ Import ebook", color = androidx.compose.ui.graphics.Color.White,
                     fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
                 Spacer(Modifier.height(4.dp))
-                Text("EPUB · PDF · MOBI · TXT · page photo", color = androidx.compose.ui.graphics.Color(0xCCFFFFFF), fontSize = 12.sp)
+                Text("EPUB · PDF · MOBI · TXT · CBZ · page photo", color = androidx.compose.ui.graphics.Color(0xCCFFFFFF), fontSize = 12.sp)
             }
             status?.let { Spacer(Modifier.height(8.dp)); Text(it, color = x.textSoft, fontSize = 13.sp) }
             Spacer(Modifier.height(6.dp))

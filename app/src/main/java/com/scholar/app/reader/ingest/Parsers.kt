@@ -1,20 +1,24 @@
 package com.scholar.app.reader.ingest
 
+import android.content.Context
 import android.util.Xml
+import com.scholar.app.model.Block
 import com.scholar.app.model.BookDocument
 import com.scholar.app.model.BookFormat
 import com.scholar.app.model.Chapter
+import com.scholar.app.model.ImageBlock
 import com.scholar.app.model.TextBlock
 import org.xmlpull.v1.XmlPullParser
 import java.io.File
 import java.util.UUID
 import java.util.zip.ZipFile
 
-/** EPUB = a ZIP of XHTML. Parse container.xml → OPF → spine order → strip each
- *  document to paragraphs. Pure Kotlin (java.util.zip + XmlPullParser). */
+/** EPUB = a ZIP of XHTML. Parse container.xml → OPF → spine order → split each document into
+ *  ordered paragraphs and inline images. Pure Kotlin (java.util.zip + XmlPullParser). */
 object EpubParser {
 
-    fun parse(file: File, fallbackTitle: String): BookDocument {
+    fun parse(context: Context, file: File, fallbackTitle: String): BookDocument {
+        val id = UUID.randomUUID().toString()
         ZipFile(file).use { zip ->
             val opfPath = rootfilePath(zip) ?: error("Not a valid EPUB (no OPF)")
             val opfText = zip.readEntry(opfPath) ?: error("OPF missing")
@@ -22,22 +26,61 @@ object EpubParser {
             val (title, author, hrefs) = parseOpf(opfText)
 
             val chapters = ArrayList<Chapter>()
+            var imgN = 0
             for (href in hrefs) {
-                val full = if (opfDir.isEmpty()) href else "$opfDir/$href"
-                val html = zip.readEntry(full.removePrefix("/")) ?: continue
-                val paras = Html.toParagraphs(html)
-                if (paras.isNotEmpty())
-                    chapters.add(Chapter(chapters.size, paras.firstOrNull()?.take(24), paras.map { TextBlock(it) }))
+                val full = (if (opfDir.isEmpty()) href else "$opfDir/$href").removePrefix("/")
+                val html = zip.readEntry(full) ?: continue
+                val baseDir = full.substringBeforeLast('/', "")
+                val blocks = ArrayList<Block>()
+                var firstText: String? = null
+                for (node in Html.toBlocks(html)) when (node) {
+                    is HtmlNode.Para -> { blocks.add(TextBlock(node.text)); if (firstText == null) firstText = node.text }
+                    is HtmlNode.Img -> {
+                        val zpath = resolveZipPath(baseDir, node.src)
+                        val bytes = zip.readBytes(zpath) ?: continue
+                        val ext = zpath.substringAfterLast('.', "jpg").lowercase().take(4)
+                        val name = "img_%04d.%s".format(imgN++, ext)
+                        ImageStore.saveBytes(context, id, name, bytes)
+                        blocks.add(ImageBlock(name))
+                    }
+                }
+                if (blocks.isNotEmpty())
+                    chapters.add(Chapter(chapters.size, firstText?.take(24), blocks))
             }
-            if (chapters.isEmpty()) error("EPUB had no readable text")
-            return BookDocument(UUID.randomUUID().toString(), title ?: fallbackTitle,
-                author, BookFormat.EPUB, chapters)
+            if (chapters.isEmpty()) error("EPUB had no readable content")
+            return BookDocument(id, title ?: fallbackTitle, author, BookFormat.EPUB, chapters)
         }
     }
 
     private fun ZipFile.readEntry(path: String): String? {
         val e = getEntry(path) ?: entries().asSequence().firstOrNull { it.name.equals(path, true) } ?: return null
         return getInputStream(e).bufferedReader(Charsets.UTF_8).use { it.readText() }
+    }
+
+    /** Read an entry's raw bytes, tolerating percent-encoding and case differences in the path. */
+    private fun ZipFile.readBytes(path: String): ByteArray? {
+        val e = getEntry(path)
+            ?: getEntry(android.net.Uri.decode(path))
+            ?: entries().asSequence().firstOrNull { it.name.equals(path, true) }
+            ?: return null
+        return getInputStream(e).use { it.readBytes() }
+    }
+
+    /** Resolve an image src (relative to [baseDir], may contain ./ and ../) to a zip entry path. */
+    private fun resolveZipPath(baseDir: String, src: String): String {
+        val clean = src.substringBefore('#').substringBefore('?')
+        val combined = when {
+            clean.startsWith("/") -> clean.removePrefix("/")
+            baseDir.isEmpty() -> clean
+            else -> "$baseDir/$clean"
+        }
+        val parts = ArrayList<String>()
+        for (seg in combined.split('/')) when (seg) {
+            "", "." -> {}
+            ".." -> if (parts.isNotEmpty()) parts.removeAt(parts.size - 1)
+            else -> parts.add(seg)
+        }
+        return parts.joinToString("/")
     }
 
     private fun rootfilePath(zip: ZipFile): String? {
@@ -91,5 +134,31 @@ object TxtParser {
             ?: String(bytes, Charsets.UTF_8)
         val paras = text.split(Regex("\\r?\\n")).map { it.trim() }.filter { it.isNotEmpty() }
         return paragraphsToDoc(title, BookFormat.TXT, paras)
+    }
+}
+
+/** CBZ / comic archive = a ZIP of page images. Save each page in name order; one scrolling
+ *  chapter of images. No OCR (comics have many pages; keep import fast — text isn't expected). */
+object CbzParser {
+    private val IMG_EXT = setOf("jpg", "jpeg", "png", "webp", "gif", "bmp")
+
+    fun parse(context: Context, file: File, title: String): BookDocument {
+        val id = UUID.randomUUID().toString()
+        ZipFile(file).use { zip ->
+            val pages = zip.entries().asSequence()
+                .filter { !it.isDirectory && it.name.substringAfterLast('.', "").lowercase() in IMG_EXT }
+                .sortedBy { it.name.lowercase() }
+                .toList()
+            if (pages.isEmpty()) error("No images found in this archive")
+            val blocks = ArrayList<Block>(pages.size)
+            pages.forEachIndexed { i, e ->
+                val ext = e.name.substringAfterLast('.', "jpg").lowercase().take(4)
+                val name = "page_%04d.%s".format(i, ext)
+                val bytes = zip.getInputStream(e).use { it.readBytes() }
+                ImageStore.saveBytes(context, id, name, bytes)
+                blocks.add(ImageBlock(name))
+            }
+            return BookDocument(id, title, null, BookFormat.CBZ, listOf(Chapter(0, null, blocks)))
+        }
     }
 }
