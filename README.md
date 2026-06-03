@@ -27,8 +27,11 @@ offline. No account, no subscription, no ads.
 
 - **Pinyin & Tones** — the sound system, every example tappable to hear it.
 - **Radicals & Components** — all 214 Kangxi radicals with meanings, each expandable to
-  show the common characters built from it. Every character screen breaks the character
-  into its components (好 = 女 *woman* + 子 *child*), so you learn structure, not strokes.
+  show the common characters built from it, and a flashcard mode for drilling them (study
+  only — radicals never enter your review deck). Each shows its everyday teaching name
+  (氵 *三点水*, 宀 *宝盖头*) alongside the formal reading, since that's what they're actually
+  called. Every character screen breaks the character into its components (好 = 女 *woman* +
+  子 *child*), so you learn structure, not strokes.
 - **Vocabulary by Level** — HSK 1 → 9 word lists, ordered by real-world frequency, with
   one-tap mining into your review deck.
 - **Handwriting** — stroke-order animation plus finger-tracing practice for ~2,000 of the
@@ -113,7 +116,7 @@ python build_content_db.py
 | [complete-hsk-vocabulary](https://github.com/drkameleon/complete-hsk-vocabulary) | MIT | HSK 2.0 + 3.0 levels and meanings |
 | [wordfreq](https://github.com/rspeer/wordfreq) | MIT | frequency ordering and reading coverage |
 | [Tatoeba](https://tatoeba.org/) | CC BY 2.0 FR | 64,658 translated example sentences (`sentences.db`) |
-| 214 Kangxi radicals | curated | radical meanings for the components lessons |
+| 214 Kangxi radicals | curated | radical meanings (in `content.db`) and everyday teaching names (in `RadicalNames.kt`) for the components lessons |
 
 The example-sentence bank ships as a *separate* `app/src/main/assets/sentences.db` (~5 MB) so
 the main `content.db` is never touched. Rebuild it with `python data-build/build_sentences_db.py`.

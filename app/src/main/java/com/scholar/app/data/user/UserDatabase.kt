@@ -124,6 +124,7 @@ interface BookDao {
     // backup / restore (metadata only — book files are device-local)
     @Query("SELECT * FROM books") suspend fun all(): List<BookEntity>
     @Upsert suspend fun upsertAll(books: List<BookEntity>)
+    @Query("DELETE FROM books") suspend fun clear()
 }
 
 @Database(

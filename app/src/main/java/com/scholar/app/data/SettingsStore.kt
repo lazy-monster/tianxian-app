@@ -19,6 +19,11 @@ class SettingsStore(context: Context) {
         get() = prefs.getFloat("desired_retention", 0.92f)
         set(v) = prefs.edit().putFloat("desired_retention", v.coerceIn(0.80f, 0.97f)).apply()
 
+    /** How many HSK words the "add next batch" button mines into the review deck at once. */
+    var hskBatchSize: Int
+        get() = prefs.getInt("hsk_batch_size", 40)
+        set(v) = prefs.edit().putInt("hsk_batch_size", v.coerceIn(5, 100)).apply()
+
     /** Persisted SAF tree-uri of the chosen auto-backup folder, or null if unset. */
     var backupTreeUri: String?
         get() = prefs.getString("backup_tree_uri", null)

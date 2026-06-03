@@ -10,11 +10,13 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -38,10 +40,12 @@ fun SettingsScreen(graph: AppGraph, dark: Boolean, onToggleTheme: () -> Unit, on
     val scope = rememberCoroutineScope()
 
     var retention by remember { mutableStateOf(settings.desiredRetention) }
+    var hskBatch by remember { mutableStateOf(settings.hskBatchSize) }
     var autoBackup by remember { mutableStateOf(settings.autoBackup) }
     var backupDir by remember { mutableStateOf(settings.backupTreeUri) }
     var intervalHours by remember { mutableStateOf(settings.backupIntervalHours) }
     var status by remember { mutableStateOf<String?>(null) }
+    var showReset by remember { mutableStateOf(false) }
 
     // Export: write the backup JSON to a file the user picks.
     val exportLauncher = rememberLauncherForActivityResult(
@@ -122,6 +126,28 @@ fun SettingsScreen(graph: AppGraph, dark: Boolean, onToggleTheme: () -> Unit, on
             }
         }
 
+        // ── New-card batch size (HSK "add next N") ───────────────────────
+        Spacer(Modifier.height(12.dp))
+        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(x.surface).padding(16.dp)) {
+            Text("New cards per batch", color = x.text, fontWeight = FontWeight.Medium, fontSize = 15.sp)
+            Text("How many words the vocabulary lists add to your review deck each time you tap " +
+                "“add next batch”. Smaller batches keep new material manageable.",
+                color = x.textSoft, fontSize = 13.sp, lineHeight = 19.sp)
+            Spacer(Modifier.height(10.dp))
+            Text("$hskBatch cards at a time", color = x.gold, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+            Slider(
+                value = hskBatch.toFloat(), onValueChange = { hskBatch = it.roundToInt() },
+                onValueChangeFinished = { settings.hskBatchSize = hskBatch },
+                valueRange = 5f..100f, steps = 18,   // 5,10,15,…,100
+                colors = SliderDefaults.colors(thumbColor = x.cinnabar, activeTrackColor = x.cinnabar,
+                    inactiveTrackColor = x.surface2),
+            )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("5", color = x.textFaint, fontSize = 11.sp)
+                Text("100", color = x.textFaint, fontSize = 11.sp)
+            }
+        }
+
         // ── Backup & restore ─────────────────────────────────────────────
         Spacer(Modifier.height(20.dp))
         Text("Backup & restore", fontFamily = SerifSC, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = x.text)
@@ -190,6 +216,18 @@ fun SettingsScreen(graph: AppGraph, dark: Boolean, onToggleTheme: () -> Unit, on
             }
         }
 
+        // ── Reset progress ───────────────────────────────────────────────
+        Spacer(Modifier.height(20.dp))
+        Text("Reset", fontFamily = SerifSC, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = x.text)
+        Spacer(Modifier.height(8.dp))
+        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(x.surface).padding(16.dp)) {
+            Text("Start over. This permanently erases your learning progress and cannot be undone — " +
+                "export a backup first if you might want it back.",
+                color = x.textSoft, fontSize = 13.sp, lineHeight = 19.sp)
+            Spacer(Modifier.height(14.dp))
+            SettingButton("Reset progress…", x.surface2) { showReset = true }
+        }
+
         // ── About ────────────────────────────────────────────────────────
         Spacer(Modifier.height(20.dp))
         Text("About", fontFamily = SerifSC, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = x.text)
@@ -200,6 +238,43 @@ fun SettingsScreen(graph: AppGraph, dark: Boolean, onToggleTheme: () -> Unit, on
         Spacer(Modifier.height(10.dp))
         AboutCard("Your data stays yours", "No account, no ads, no tracking. Your progress and imported books live only on this device — back them up above whenever you like.")
         Spacer(Modifier.height(30.dp))
+    }
+
+    if (showReset) {
+        val reset: (Boolean) -> Unit = { includeBooks ->
+            scope.launch {
+                graph.backup.resetProgress(includeBooks)
+                status = if (includeBooks) "Everything was reset — deck and library are empty."
+                    else "Review progress was reset. Your imported books were kept."
+                showReset = false
+            }
+        }
+        AlertDialog(
+            onDismissRequest = { showReset = false },
+            containerColor = x.surface,
+            title = { Text("Reset progress?", color = x.text, fontFamily = SerifSC,
+                fontWeight = FontWeight.SemiBold, fontSize = 18.sp) },
+            text = {
+                Text("This can't be undone — export a backup first if unsure.\n\n" +
+                    "• Review progress: deletes every card, all review history and known-character " +
+                    "strength, but keeps your imported books.\n\n" +
+                    "• Everything: also removes your imported library from this device.",
+                    color = x.textSoft, fontSize = 14.sp, lineHeight = 20.sp)
+            },
+            confirmButton = {
+                Column(horizontalAlignment = Alignment.End) {
+                    TextButton(onClick = { reset(false) }) {
+                        Text("Reset review progress", color = x.cinnabar, fontWeight = FontWeight.SemiBold)
+                    }
+                    TextButton(onClick = { reset(true) }) {
+                        Text("Reset everything", color = x.cinnabar, fontWeight = FontWeight.Bold)
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showReset = false }) { Text("Cancel", color = x.textSoft) }
+            },
+        )
     }
 }
 

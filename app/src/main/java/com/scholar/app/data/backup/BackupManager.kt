@@ -41,7 +41,8 @@ class BackupManager(
 
         root.put("settings", JSONObject()
             .put("darkTheme", settings.darkTheme)
-            .put("desiredRetention", settings.desiredRetention.toDouble()))
+            .put("desiredRetention", settings.desiredRetention.toDouble())
+            .put("hskBatchSize", settings.hskBatchSize))
 
         root.put("cards", JSONArray().apply {
             db.cardDao().all().forEach { c ->
@@ -88,6 +89,7 @@ class BackupManager(
         root.optJSONObject("settings")?.let { s ->
             if (s.has("darkTheme")) settings.darkTheme = s.getBoolean("darkTheme")
             if (s.has("desiredRetention")) settings.desiredRetention = s.getDouble("desiredRetention").toFloat()
+            if (s.has("hskBatchSize")) settings.hskBatchSize = s.getInt("hskBatchSize")
         }
 
         val cards = root.optJSONArray("cards")?.mapObjects { o ->
@@ -134,6 +136,22 @@ class BackupManager(
         db.bookDao().upsertAll(books)   // keep any books already imported on this device
 
         Summary(cards.size, logs.size, known.size, books.size)
+    }
+
+    /**
+     * Wipe on-device progress. [includeBooks] also removes the imported library (database rows
+     * and their cached book files); when false, books and their reading positions are kept.
+     * Irreversible — callers must confirm with the user first.
+     */
+    suspend fun resetProgress(includeBooks: Boolean): Unit = withContext(Dispatchers.IO) {
+        db.cardDao().clear()
+        db.reviewLogDao().clear()
+        db.knownDao().clear()
+        if (includeBooks) {
+            db.bookDao().all().forEach { runCatching { java.io.File(it.cachePath).delete() } }
+            db.bookDao().clear()
+        }
+        settings.lastBackupMillis = 0L
     }
 
     /** Write the backup to a user-picked file (ACTION_CREATE_DOCUMENT result uri). */

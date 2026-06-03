@@ -25,8 +25,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-private const val BATCH = 40
-
 private val LEVELS = listOf(
     "new-1" to "HSK 1", "new-2" to "HSK 2", "new-3" to "HSK 3", "new-4" to "HSK 4",
     "new-5" to "HSK 5", "new-6" to "HSK 6", "new-7" to "HSK 7-9",
@@ -57,9 +55,10 @@ fun LevelsScreen(graph: AppGraph, onBack: () -> Unit, onOpenChar: (String) -> Un
         mined[word.word] = true
     }
 
+    val batch = graph.settings.hskBatchSize
     val minedCount = words.count { mined[it.word] == true }
     val remaining = words.size - minedCount
-    val nextBatch = (remaining).coerceAtMost(BATCH)
+    val nextBatch = (remaining).coerceAtMost(batch)
 
     LazyColumn(Modifier.fillMaxSize().background(x.bg).padding(horizontal = 22.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -92,7 +91,7 @@ fun LevelsScreen(graph: AppGraph, onBack: () -> Unit, onOpenChar: (String) -> Un
                 .clickable(enabled = enabled) {
                     adding = true
                     scope.launch {
-                        words.filter { mined[it.word] != true }.take(BATCH).forEach { add(it) }
+                        words.filter { mined[it.word] != true }.take(batch).forEach { add(it) }
                         adding = false
                     }
                 }.padding(13.dp), contentAlignment = Alignment.Center) {

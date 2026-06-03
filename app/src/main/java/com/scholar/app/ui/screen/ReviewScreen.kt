@@ -85,7 +85,7 @@ fun ReviewScreen(graph: AppGraph, onOpenChar: (String) -> Unit = {}) {
                     val parts = card.backRef.split(" · ", limit = 2)
                     Text(parts.getOrElse(0) { "" }, color = x.gold, fontSize = 24.sp)
                     Spacer(Modifier.height(8.dp))
-                    Text(parts.getOrElse(1) { card.backRef }, color = x.text, fontSize = 17.sp,
+                    Text(coreGloss(parts.getOrElse(1) { card.backRef }), color = x.text, fontSize = 17.sp,
                         modifier = Modifier.padding(horizontal = 24.dp))
                     Spacer(Modifier.height(12.dp))
                     Text("🔊", fontSize = 26.sp, modifier = Modifier.clickable { graph.speaker.speak(card.frontRef) })
@@ -133,4 +133,28 @@ private fun grade(graph: AppGraph, scope: kotlinx.coroutines.CoroutineScope,
                   card: CardEntity, rating: Rating, after: () -> Unit) {
     scope.launch { graph.cards.grade(card, rating) }
     after()
+}
+
+/**
+ * Reduce a full dictionary gloss to its core senses so the review card is recallable at a glance.
+ * CC-CEDICT / HSK glosses cram many senses ("aim, goal; of; possessive particle; …") which makes
+ * recognition harder — the character screen ("study character") still shows the full definition.
+ */
+private fun coreGloss(raw: String): String {
+    val cleaned = raw.trim()
+    if (cleaned.isEmpty()) return cleaned
+    val senses = cleaned.split('/', ';', '；', '|')
+        .map { it.trim().trim(',', '，').trim() }
+        .filter { it.isNotEmpty() }
+        .filterNot {
+            val l = it.lowercase()
+            l.startsWith("cl:") || l.startsWith("taiwan pr") || l.startsWith("also pr") ||
+                l.startsWith("variant of") || l.startsWith("old variant") || l.startsWith("see ")
+        }
+    if (senses.isEmpty()) return cleaned
+    // keep the first two senses, each trimmed to its first few comma-listed synonyms
+    val core = senses.take(2).joinToString("; ") { sense ->
+        sense.split(',', '，').map { it.trim() }.filter { it.isNotEmpty() }.take(3).joinToString(", ")
+    }
+    return core.ifEmpty { cleaned }
 }
