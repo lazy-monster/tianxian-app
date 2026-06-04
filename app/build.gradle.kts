@@ -1,9 +1,22 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
 }
+
+// Release signing is pulled from a local (git-ignored) keystore.properties or from environment
+// variables (CI secrets). Nothing secret is committed. With neither present, `assembleRelease`
+// falls back to debug signing so it still produces an installable APK for quick testing.
+val keystoreProps = Properties().apply {
+    val f = rootProject.file("keystore.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
+fun signingValue(propKey: String, envKey: String): String? =
+    keystoreProps.getProperty(propKey) ?: System.getenv(envKey)
+val hasReleaseKeystore = signingValue("storeFile", "KEYSTORE_FILE") != null
 
 android {
     namespace = "com.scholar.app"
@@ -13,14 +26,27 @@ android {
         applicationId = "com.scholar.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 8
+        versionName = "0.8.0"
         vectorDrawables { useSupportLibrary = true }
+    }
+    signingConfigs {
+        create("release") {
+            if (hasReleaseKeystore) {
+                // resolve relative paths (keystore.properties) against the repo root; absolute CI paths pass through
+                storeFile = rootProject.file(signingValue("storeFile", "KEYSTORE_FILE")!!)
+                storePassword = signingValue("storePassword", "KEYSTORE_PASSWORD")
+                keyAlias = signingValue("keyAlias", "KEY_ALIAS")
+                keyPassword = signingValue("keyPassword", "KEY_PASSWORD")
+            }
+        }
     }
     buildTypes {
         release {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = if (hasReleaseKeystore) signingConfigs.getByName("release")
+                else signingConfigs.getByName("debug")
         }
     }
     compileOptions {

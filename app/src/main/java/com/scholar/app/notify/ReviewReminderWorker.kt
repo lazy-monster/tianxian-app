@@ -11,6 +11,7 @@ import androidx.core.content.ContextCompat
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.scholar.app.MainActivity
+import com.scholar.app.data.SettingsStore
 import com.scholar.app.data.user.UserDatabase
 
 /**
@@ -25,26 +26,29 @@ class ReviewReminderWorker(context: Context, params: WorkerParameters) : Corouti
         val db = UserDatabase.get(ctx)
         val now = System.currentTimeMillis()
         val due = db.cardDao().dueCount(now)
-        val last = db.reviewLogDao().lastReviewMillis() ?: 0L
+        // "Studied today" counts both reviews and gated-track trials, so a study-only day
+        // doesn't trigger a guilt-trip notification.
+        val lastReview = db.reviewLogDao().lastReviewMillis() ?: 0L
+        val lastActivity = maxOf(lastReview, SettingsStore(ctx).lastStudyMillis)
 
-        val content: Pair<String, String>? = when {
-            due > 0 -> "$due review${if (due == 1) "" else "s"} ready" to
-                "Your cultivation awaits — a few minutes keeps the gains."
-            last > 0L && now - last >= DAY_MS -> "Don't break your streak" to
-                "It's been a day since your last review. A short session keeps your momentum."
+        val content: Triple<String, String, String>? = when {
+            due > 0 -> Triple("$due review${if (due == 1) "" else "s"} ready",
+                "Your cultivation awaits — a few minutes keeps the gains.", "review")
+            lastActivity > 0L && now - lastActivity >= DAY_MS -> Triple("You haven't cultivated today",
+                "It's been a day since your last review or trial. A short session — reviews or a cultivation trial — keeps your momentum.", "learn")
             else -> null
         }
-        content?.let { (title, body) -> notify(ctx, title, body) }
+        content?.let { (title, body, route) -> notify(ctx, title, body, route) }
         return Result.success()
     }
 
-    private fun notify(ctx: Context, title: String, body: String) {
+    private fun notify(ctx: Context, title: String, body: String, route: String) {
         Reminders.ensureChannel(ctx)
         if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS)
             != PackageManager.PERMISSION_GRANTED) return   // auto-granted < API 33; explicit ≥ 33
 
         val tap = Intent(ctx, MainActivity::class.java).apply {
-            putExtra("route", "review")
+            putExtra("route", route)
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
         val pi = PendingIntent.getActivity(

@@ -24,8 +24,8 @@ private data class Section(
 
 private val SECTIONS = listOf(
     Section("learn/pinyin", "拼", "Pinyin & Tones", "The sound system — start here", "Stage 0"),
-    Section("learn/radicals", "部", "Radicals & Components", "The 214 building blocks of every character", "Stage 1"),
-    Section("learn/levels", "级", "Vocabulary by Level", "Frequency-ordered words, HSK 1 → 9", "Stage 2"),
+    Section("learn/radicals", "部", "Radicals & Components", "Cultivation trials drill the 214 building blocks — shape, meaning & sound", "Stage 1"),
+    Section("learn/levels", "级", "Vocabulary by Level", "Guided groups of 20 — learn sounds & meanings, gated by trials", "Stage 2"),
     Section("learn/writing", "写", "Handwriting", "Stroke order & tracing practice", "Anytime"),
     Section("learn/cultivation", "修", "Cultivation", "Your rank on the realm ladder, plus genre vocabulary", "Anytime"),
 )

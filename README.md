@@ -10,7 +10,28 @@ is measured in the characters you can actually read, not exam levels.
 
 学 · 拼 · 木 · 书
 
+[![Latest release](https://img.shields.io/github/v/release/lazy-monster/scholar-app?label=download&sort=semver)](https://github.com/lazy-monster/scholar-app/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/lazy-monster/scholar-app/total)](https://github.com/lazy-monster/scholar-app/releases)
+[![Build](https://github.com/lazy-monster/scholar-app/actions/workflows/build.yml/badge.svg)](https://github.com/lazy-monster/scholar-app/actions/workflows/build.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](#license)
+
+### → [**Download the latest APK**](https://github.com/lazy-monster/scholar-app/releases/latest) ←
+
+No account, no ads, no tracking — works fully offline. If Scholar helps you, a ⭐ on the repo is appreciated.
+
 </div>
+
+---
+
+## Install
+
+1. Grab `scholar-<version>.apk` from the [**latest release**](https://github.com/lazy-monster/scholar-app/releases/latest).
+2. Open it on your Android phone (Android 8.0 / API 26 or newer).
+3. Allow "install from unknown sources" if prompted — Scholar isn't on the Play Store, so your
+   phone asks once. The APK is built in the open by GitHub Actions ([release workflow](.github/workflows/release.yml)).
+
+That's it. Everything runs on-device; back up your progress to a single file any time from
+**Settings → Backup**.
 
 ---
 
@@ -27,22 +48,26 @@ offline. No account, no subscription, no ads.
 
 - **Pinyin & Tones** — the sound system, every example tappable to hear it.
 - **Radicals & Components** — all 214 Kangxi radicals with meanings, each expandable to
-  show the common characters built from it. Two study paths (both learning-only — radicals
-  never enter your review deck): a **flashcard** mode, and **Cultivation trials** — the
-  radicals split into batches (size configurable, default 20) drilled as a multiple-choice
-  trial that scores you; score 85%+ to *break through* and unlock the next trial, so you
-  climb the 214 in gated steps. Each radical shows its everyday teaching name (氵 *三点水*,
-  宀 *宝盖头*) alongside the formal reading. Every character screen breaks the character into
-  its components (好 = 女 *woman* + 子 *child*), so you learn structure, not strokes.
-- **Vocabulary by Level** — HSK 1 → 9 word lists, ordered by real-world frequency, with
-  one-tap mining into your review deck.
+  show the common characters built from it. A **flashcard** mode plus **Cultivation trials**:
+  the radicals split into batches (size configurable, default 20) and drilled in *all four
+  directions* — shape→meaning, meaning→shape, **hear→shape**, and **shape→reading** — so each
+  trial tests recognition, recall *and* pronunciation. Score 85%+ to *break through* and unlock
+  the next trial. Each radical shows its everyday teaching name (氵 *三点水*, 宀 *宝盖头*)
+  alongside the formal reading; every character screen breaks the character into its components
+  (好 = 女 *woman* + 子 *child*), so you learn structure, not strokes.
+- **Vocabulary by Level** — HSK 1 → 9 word lists, ordered by real-world frequency. Mine words
+  freely one-tap, or take the **guided cultivation track**: learn 20 at a time (sounds and
+  meanings), pass a trial that quizzes all four directions including audio, and the group is
+  *sealed into your review deck* and the next group unlocks. A structured way to measure progress
+  on top of free mining.
 - **Handwriting** — stroke-order animation plus finger-tracing practice for ~2,000 of the
   most common characters.
-- **Cultivation** — your learning progress *is* your rank. Characters known, words
-  mastered (FSRS), and genre terms learned blend into a cultivation base that places you
-  on the realm ladder (炼气 Qi Refining → 渡劫 Tribulation), with stages, breakthroughs, and
-  a long climb where comfortable native-novel reading sits near the peak. The genre's
-  signature vocabulary is folded in, ordered by difficulty.
+- **Cultivation** — your learning progress *is* your rank. Characters known and words mastered
+  (FSRS) from **review**, plus radicals and character groups cleared on the **study tracks**,
+  blend into a cultivation base on the realm ladder (炼气 Qi Refining → 渡劫 Tribulation). Both
+  paths count — passing a trial advances your rank immediately, so a day spent studying moves you
+  forward even when you have no time to review. Crossing a sub-stage or realm boundary triggers a
+  **breakthrough** screen. A long climb where comfortable native-novel reading sits near the peak.
 
 **A reader for your own books.** Import EPUB, TXT, MOBI, PDF, CBZ comics, or a photo of a page.
 Tap any word for its reading and meaning, mine it into spaced repetition, or mark it known. Words
@@ -58,7 +83,10 @@ controls auto-hide as you read, and scrolling past the end of a chapter flows st
 **Spaced repetition done right.** A from-scratch implementation of **FSRS-6**, the modern
 scheduler that needs ~20–30% fewer reviews than classic SM-2 for the same retention. When you're
 caught up you can **review ahead** to drill the next cards early (they reschedule normally), and a
-gentle daily **reminder** nudges you when reviews are ready or you've gone quiet.
+gentle daily **reminder** nudges you when reviews are ready or you've gone a day without reviewing
+*or* studying — cultivation trials count, so a study-only day won't trigger the "you haven't
+cultivated today" nudge. Your full progress (cards, history, known characters, and all track
+progress) exports to one portable JSON file from **Settings → Backup**, with optional auto-backup.
 
 **On your home screen.** Two optional widgets (Jetpack Glance): a *character of the moment* that
 rotates and opens the character when tapped, and a *cultivation status* widget showing your rank,
@@ -109,10 +137,55 @@ gradle wrapper            # generate the wrapper (jar is not committed)
 The APK is written to `app/build/outputs/apk/debug/app-debug.apk`. Install it on a device
 with "install from unknown sources" enabled.
 
+### Release build (signed APK)
+
+A *release* APK is what you distribute to users. It needs a signing key — create one once:
+
+```bash
+keytool -genkey -v -keystore release.jks -keyalg RSA -keysize 2048 \
+        -validity 10000 -alias scholar
+```
+
+Keep `release.jks` **private** (it's git-ignored). Then either:
+
+- **Locally** — create a git-ignored `keystore.properties` in the repo root:
+
+  ```properties
+  storeFile=release.jks
+  storePassword=…
+  keyAlias=scholar
+  keyPassword=…
+  ```
+
+  and run `./gradlew assembleRelease`. The signed APK lands in
+  `app/build/outputs/apk/release/app-release.apk`.
+
+- **In CI** — set four repository **Secrets** (Settings → Secrets and variables → Actions):
+  `KEYSTORE_BASE64` (`base64 -w0 release.jks`), `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`.
+
+> Without a keystore, `assembleRelease` still works but falls back to **debug signing** — fine for
+> testing, not for sharing. The signing config reads from `keystore.properties` or the matching
+> `KEYSTORE_FILE` / `KEYSTORE_PASSWORD` / `KEY_ALIAS` / `KEY_PASSWORD` environment variables.
+
+### Cutting a release
+
+Tag a commit and push the tag — that's the whole flow:
+
+```bash
+git tag v0.8.0 && git push origin v0.8.0
+```
+
+`.github/workflows/release.yml` then builds the signed release APK and publishes it as a GitHub
+**Release** named after the tag, with auto-generated notes, so the
+[Download](https://github.com/lazy-monster/scholar-app/releases/latest) link always points at the
+newest build. Bump `versionCode`/`versionName` in `app/build.gradle.kts` before tagging.
+
 ### Continuous integration
 
-`.github/workflows/build.yml` builds a debug APK on every push and uploads it as the
-`scholar-debug-apk` artifact, so you can grab a build without a local toolchain.
+- `.github/workflows/build.yml` — builds a **debug** APK on every push and uploads it as the
+  `scholar-debug-apk` artifact, so you can grab a build without a local toolchain.
+- `.github/workflows/release.yml` — on a `v*` tag, builds the **signed release** APK and publishes
+  it as a GitHub Release.
 
 ## The data is real and open
 
@@ -156,10 +229,13 @@ the main `content.db` is never touched. Rebuild it with `python data-build/build
 │  │  ├─ audio/                      # text-to-speech
 │  │  ├─ ui/screen/                  # Learn, Today, Reader, Review, Dictionary, …
 │  │  ├─ ui/onboarding/              # first-run intro
+│  │  ├─ ui/Breakthrough.kt          # cultivation breakthrough overlay
 │  │  └─ ui/theme/                   # Ink & Jade theme
 │  └─ AndroidManifest.xml
 ├─ data-build/                       # Python pipeline that builds content.db
-└─ .github/workflows/build.yml       # CI: builds the APK
+└─ .github/workflows/
+   ├─ build.yml                      # CI: debug APK on every push
+   └─ release.yml                    # CI: signed release APK on a v* tag
 ```
 
 ## Roadmap
@@ -172,8 +248,9 @@ the main `content.db` is never touched. Rebuild it with `python data-build/build
 
 ## Known limitations
 
-- No APK is committed — build it with any method above. The Gradle wrapper jar is not
-  committed; Android Studio or `gradle wrapper` generates it.
+- Prebuilt APKs are published on the [Releases](https://github.com/lazy-monster/scholar-app/releases)
+  page, not committed to the tree. The Gradle wrapper jar is also not committed; Android Studio or
+  `gradle wrapper` generates it.
 - Handwriting and stroke data cover the ~2,000 most frequent characters (plus all HSK),
   not every character in the dictionary.
 - MOBI support covers the common PalmDOC case; convert HUFF/CDIC or KF8/AZW3 files to EPUB.

@@ -50,7 +50,13 @@ class BackupManager(
             .put("readerTtsRate", settings.readerTtsRate.toDouble())
             .put("radicalBatchSize", settings.radicalBatchSize)
             .put("radicalUnlocked", settings.radicalUnlocked)
+            .put("lastStudyMillis", settings.lastStudyMillis)
             .put("remindersEnabled", settings.remindersEnabled))
+
+        // Gated-track progress (radical + character cultivation): per-batch/level/group keys.
+        root.put("trackProgress", JSONObject().apply {
+            settings.exportTrackProgress().forEach { (k, v) -> put(k, v) }
+        })
 
         root.put("cards", JSONArray().apply {
             db.cardDao().all().forEach { c ->
@@ -106,7 +112,16 @@ class BackupManager(
             // batch size first — its setter resets radical progress when it changes
             if (s.has("radicalBatchSize")) settings.radicalBatchSize = s.getInt("radicalBatchSize")
             if (s.has("radicalUnlocked")) settings.radicalUnlocked = s.getInt("radicalUnlocked")
+            if (s.has("lastStudyMillis")) settings.lastStudyMillis = s.getLong("lastStudyMillis")
             if (s.has("remindersEnabled")) settings.remindersEnabled = s.getBoolean("remindersEnabled")
+        }
+
+        // Restore gated-track progress AFTER the scalars above (radicalBatchSize's setter wipes
+        // radical progress, so the per-batch/group scores must be written last).
+        root.optJSONObject("trackProgress")?.let { t ->
+            val progress = HashMap<String, Int>()
+            t.keys().forEach { k -> progress[k] = t.getInt(k) }
+            settings.importTrackProgress(progress)
         }
 
         val cards = root.optJSONArray("cards")?.mapObjects { o ->
@@ -220,5 +235,7 @@ class BackupManager(
     private inline fun <T> JSONArray.mapObjects(f: (JSONObject) -> T): List<T> =
         (0 until length()).map { f(getJSONObject(it)) }
 
-    companion object { const val SCHEMA = 1 }
+    // SCHEMA 2 adds gated-track progress + lastStudyMillis. Restore is keyed on the "scholar"
+    // app marker, not the schema number, so older (schema-1) backups still load fine.
+    companion object { const val SCHEMA = 2 }
 }

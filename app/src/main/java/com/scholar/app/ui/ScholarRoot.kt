@@ -1,6 +1,8 @@
 package com.scholar.app.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.*
@@ -8,15 +10,20 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.scholar.app.data.Cultivation
 import com.scholar.app.di.AppGraph
 import com.scholar.app.ui.screen.*
 import com.scholar.app.ui.theme.Theme
@@ -44,6 +51,30 @@ fun ScholarRoot(graph: AppGraph, dark: Boolean, onToggleTheme: () -> Unit, start
     val onTab = TABS.any { tab -> current?.hierarchy?.any { it.route == tab.route } == true }
     val showBar = onTab || route?.startsWith("learn/") == true
 
+    // Cultivation breakthrough watcher: recompute the rank from review progress (known/mastered)
+    // and the study tracks (studyTick), and surface a celebration when it crosses a boundary.
+    val knownCount by graph.known.knownCountFlow().collectAsStateWithLifecycle(0)
+    val masteredCount by graph.cards.masteredCountFlow().collectAsStateWithLifecycle(0)
+    val studyTick by graph.settings.studyTick.collectAsStateWithLifecycle(0)
+    val rank = remember(knownCount, masteredCount, studyTick) {
+        Cultivation.rankFor(knownCount, masteredCount,
+            graph.settings.radicalsCultivated(), graph.settings.trackWordsCultivated())
+    }
+    var breakthrough by remember { mutableStateOf<BreakthroughInfo?>(null) }
+    LaunchedEffect(rank.realm.index, rank.title, rank.score) {
+        val s = graph.settings
+        if (s.lastSeenRealm < 0) {
+            s.recordCultivation(rank.realm.index, rank.title, rank.score)   // first run / upgrade: baseline only
+        } else {
+            if (rank.score > s.lastSeenScore) {
+                if (rank.realm.index > s.lastSeenRealm) breakthrough = BreakthroughInfo(rank, major = true)
+                else if (rank.title != s.lastSeenStage) breakthrough = BreakthroughInfo(rank, major = false)
+            }
+            s.recordCultivation(rank.realm.index, rank.title, rank.score)
+        }
+    }
+
+    Box(Modifier.fillMaxSize()) {
     Scaffold(
         containerColor = x.bg,
         bottomBar = {
@@ -115,4 +146,7 @@ fun ScholarRoot(graph: AppGraph, dark: Boolean, onToggleTheme: () -> Unit, start
             }
         }
     }
+
+        breakthrough?.let { BreakthroughOverlay(it, onDismiss = { breakthrough = null }) }
+    }   // end Box (Scaffold + breakthrough overlay)
 }

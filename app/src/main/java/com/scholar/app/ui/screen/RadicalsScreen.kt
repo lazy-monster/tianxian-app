@@ -8,6 +8,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
@@ -28,7 +29,6 @@ import com.scholar.app.ui.theme.SerifSC
 import com.scholar.app.ui.theme.Theme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlin.random.Random
 
 private const val TRIAL_PASS = 85   // % needed to break through a radical batch and unlock the next
 
@@ -314,22 +314,38 @@ private fun RadicalTrackScreen(graph: AppGraph, radicals: List<Radical>, onExit:
     }
 }
 
-/** One multiple-choice question — either glyph→meaning or meaning→glyph. */
-private data class RQuestion(val prompt: Radical, val glyphToMeaning: Boolean, val options: List<String>, val answer: String)
+/** What a trial question asks. The two sound directions — hear→shape and shape→reading — are what
+    make the trials genuinely teach pronunciation, not just shape↔meaning. */
+private enum class RKind { GLYPH_TO_MEANING, MEANING_TO_GLYPH, SOUND_TO_GLYPH, GLYPH_TO_SOUND }
 
+/** One multiple-choice question. [answer] is a meaning, a glyph, or a reading depending on [kind]. */
+private data class RQuestion(val prompt: Radical, val kind: RKind, val options: List<String>, val answer: String)
+
+/** The spoken reading shown as a quiz option: common name + pinyin, else the formal reading. */
+private fun readingLabel(r: Radical): String =
+    RadicalNames.forNumber(r.number)?.let { "${it.name} ${it.pinyin}" } ?: r.pinyin
+
+/** Three distinct wrong options for [r], projected through [field] (meaning, glyph, or reading). */
+private inline fun radDistractors(all: List<Radical>, r: Radical, field: (Radical) -> String): List<String> {
+    val correct = field(r)
+    return all.asSequence().filter { it.number != r.number }.map(field)
+        .filter { it.isNotBlank() }.distinct().filter { it != correct }.toList().shuffled().take(3)
+}
+
+/** Every radical is tested in all four directions — shape→meaning, meaning→shape, sound→shape and
+    shape→reading — so one trial drills recognition, recall and pronunciation together. */
 private fun buildTrial(batch: List<Radical>, all: List<Radical>): List<RQuestion> =
-    batch.map { r ->
-        if (Random.nextBoolean()) {
-            val correct = shortMeaning(r)
-            val distract = all.asSequence().filter { it.number != r.number }.map { shortMeaning(it) }
-                .distinct().filter { it != correct }.toList().shuffled().take(3)
-            RQuestion(r, true, (distract + correct).shuffled(), correct)
-        } else {
-            val correct = r.radical
-            val distract = all.asSequence().filter { it.number != r.number }.map { it.radical }
-                .distinct().filter { it != correct }.toList().shuffled().take(3)
-            RQuestion(r, false, (distract + correct).shuffled(), correct)
-        }
+    batch.flatMap { r ->
+        listOf(
+            RQuestion(r, RKind.GLYPH_TO_MEANING,
+                (radDistractors(all, r) { shortMeaning(it) } + shortMeaning(r)).shuffled(), shortMeaning(r)),
+            RQuestion(r, RKind.MEANING_TO_GLYPH,
+                (radDistractors(all, r) { it.radical } + r.radical).shuffled(), r.radical),
+            RQuestion(r, RKind.SOUND_TO_GLYPH,
+                (radDistractors(all, r) { it.radical } + r.radical).shuffled(), r.radical),
+            RQuestion(r, RKind.GLYPH_TO_SOUND,
+                (radDistractors(all, r) { readingLabel(it) } + readingLabel(r)).shuffled(), readingLabel(r)),
+        )
     }.shuffled()
 
 @Composable
@@ -397,20 +413,44 @@ private fun RadicalTrial(graph: AppGraph, radicals: List<Radical>, batchIndex: I
         }
 
         val q = questions[qIdx]
+        val common = RadicalNames.forNumber(q.prompt.number)
+        val glyphOptions = q.kind == RKind.MEANING_TO_GLYPH || q.kind == RKind.SOUND_TO_GLYPH   // pick a glyph
         val optScroll = rememberScrollState()
         LaunchedEffect(qIdx) { optScroll.scrollTo(0) }
+        // a sound question speaks the radical's name as it appears (and is replayable below)
+        LaunchedEffect(qIdx, attempt) {
+            if (q.kind == RKind.SOUND_TO_GLYPH) graph.speaker.speak(speakTarget(q.prompt, common))
+        }
         // prompt + options scroll if they don't fit, so the Next button is always reachable
         Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(optScroll)) {
         Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(x.surface2).padding(vertical = 28.dp),
             contentAlignment = Alignment.Center) {
-            if (q.glyphToMeaning) {
-                Text(q.prompt.radical, fontFamily = SerifSC, fontWeight = FontWeight.SemiBold, fontSize = 88.sp, color = x.text)
-            } else {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("which radical means", color = x.textFaint, fontSize = 12.sp, letterSpacing = 1.sp)
-                    Spacer(Modifier.height(8.dp))
-                    Text(shortMeaning(q.prompt), color = x.gold, fontSize = 26.sp, fontWeight = FontWeight.Medium)
-                }
+            when (q.kind) {
+                RKind.GLYPH_TO_MEANING ->
+                    Text(q.prompt.radical, fontFamily = SerifSC, fontWeight = FontWeight.SemiBold, fontSize = 88.sp, color = x.text)
+                RKind.MEANING_TO_GLYPH ->
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("which radical means", color = x.textFaint, fontSize = 12.sp, letterSpacing = 1.sp)
+                        Spacer(Modifier.height(8.dp))
+                        Text(shortMeaning(q.prompt), color = x.gold, fontSize = 26.sp, fontWeight = FontWeight.Medium)
+                    }
+                RKind.SOUND_TO_GLYPH ->
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("which radical sounds like this", color = x.textFaint, fontSize = 12.sp, letterSpacing = 1.sp)
+                        Spacer(Modifier.height(14.dp))
+                        Box(Modifier.size(82.dp).clip(CircleShape).background(x.cinnabar)
+                            .clickable { graph.speaker.speak(speakTarget(q.prompt, common)) }, contentAlignment = Alignment.Center) {
+                            Text("🔊", fontSize = 36.sp)
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        Text("tap to replay", color = x.textFaint, fontSize = 11.sp, letterSpacing = 1.sp)
+                    }
+                RKind.GLYPH_TO_SOUND ->
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("how is this radical read?", color = x.textFaint, fontSize = 12.sp, letterSpacing = 1.sp)
+                        Spacer(Modifier.height(10.dp))
+                        Text(q.prompt.radical, fontFamily = SerifSC, fontWeight = FontWeight.SemiBold, fontSize = 76.sp, color = x.text)
+                    }
             }
         }
         Spacer(Modifier.height(20.dp))
@@ -427,11 +467,29 @@ private fun RadicalTrial(graph: AppGraph, radicals: List<Radical>, batchIndex: I
             val fg = if (reveal && (isAnswer || opt == selected)) Color.White else x.text
             Box(Modifier.fillMaxWidth().padding(vertical = 5.dp).clip(RoundedCornerShape(14.dp))
                 .background(bg).clickable(enabled = selected == null) {
-                    selected = opt; if (opt == q.answer) score++
+                    selected = opt
+                    if (opt == q.answer) score++
+                    graph.speaker.speak(speakTarget(q.prompt, common))   // hear it the moment you answer
                 }.padding(vertical = 15.dp, horizontal = 16.dp), contentAlignment = Alignment.Center) {
-                Text(opt, fontFamily = if (q.glyphToMeaning) SerifSC else SerifSC,
-                    fontSize = if (q.glyphToMeaning) 16.sp else 30.sp, color = fg,
-                    fontWeight = if (q.glyphToMeaning) FontWeight.Normal else FontWeight.SemiBold)
+                Text(opt, fontFamily = SerifSC,
+                    fontSize = if (glyphOptions) 30.sp else 16.sp, color = fg,
+                    fontWeight = if (glyphOptions) FontWeight.SemiBold else FontWeight.Normal)
+            }
+        }
+
+        // reveal card — always names the radical and lets you replay its sound, so every
+        // question reinforces glyph ↔ name ↔ pronunciation regardless of what was asked.
+        if (selected != null) {
+            Spacer(Modifier.height(14.dp))
+            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(x.surface).padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically) {
+                Text(q.prompt.radical, fontFamily = SerifSC, fontSize = 30.sp, color = x.gold)
+                Spacer(Modifier.width(14.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(displayName(q.prompt, common), color = x.text, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                    Text("#${q.prompt.number} · ${q.prompt.meaning}", color = x.textSoft, fontSize = 12.sp, maxLines = 2)
+                }
+                Text("🔊", fontSize = 22.sp, modifier = Modifier.clickable { graph.speaker.speak(speakTarget(q.prompt, common)) })
             }
         }
         }   // end scrollable prompt+options column
@@ -444,6 +502,7 @@ private fun RadicalTrial(graph: AppGraph, radicals: List<Radical>, batchIndex: I
                 else {
                     val pct = score * 100 / questions.size
                     finishedPct = pct
+                    settings.markStudiedNow()                 // a completed trial counts as studying today
                     settings.setRadicalBestScore(batchIndex, pct)
                     if (pct >= TRIAL_PASS && batchIndex == settings.radicalUnlocked) {
                         settings.radicalUnlocked = batchIndex + 1

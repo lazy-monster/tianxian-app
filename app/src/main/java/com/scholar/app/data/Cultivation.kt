@@ -4,10 +4,15 @@ package com.scholar.app.data
  * Maps real learning progress onto the xianxia cultivation ladder, so the genre page
  * becomes a living rank rather than a glossary.
  *
- * Cultivation base (修为) blends three signals:
- *   - characters known          (the spine, weight 1.0)
- *   - words mastered via FSRS    (breadth, weight 0.2)
- *   - genre terms learned        (genre fluency, weight 0.5 — a deliberate bonus)
+ * Cultivation base (修为) blends four signals:
+ *   - characters known           (the spine, weight 1.0 — earned through review/marking)
+ *   - words mastered via FSRS     (review depth, weight 0.2)
+ *   - radicals cultivated         (foundation cleared on the radical track, weight 0.5)
+ *   - words sealed on the track   (study credit for passing character trials, weight 0.4)
+ *
+ * Crucially, **both review and the gated study tracks move the rank**: the tracks grant credit
+ * the moment you break through a trial, so a study-only day (no reviews) still advances you;
+ * reviews then deepen it as the same characters become "known" and eventually "mastered".
  *
  * The ladder is tuned as a long climb: comfortable native-novel reading lands around the
  * Tribulation realm, and Great Perfection sits well beyond it.
@@ -32,8 +37,8 @@ object Cultivation {
     private val QI_LAYERS = listOf(0, 8, 18, 30, 45, 62, 82, 105, 128)   // entry score for Qi Refining layers 1..9
     private val SUBSTAGES = listOf("Early Stage", "Middle Stage", "Late Stage", "Great Perfection")
 
-    fun score(chars: Int, wordsMastered: Int, genreTerms: Int): Int =
-        (chars + 0.2 * wordsMastered + 0.5 * genreTerms).toInt()
+    fun score(chars: Int, wordsMastered: Int, radicalsCultivated: Int, trackWords: Int): Int =
+        (chars + 0.2 * wordsMastered + 0.5 * radicalsCultivated + 0.4 * trackWords).toInt()
 
     data class Rank(
         val realm: Realm,
@@ -48,8 +53,8 @@ object Cultivation {
         val isPeak: Boolean,
     )
 
-    fun rankFor(chars: Int, wordsMastered: Int, genreTerms: Int): Rank {
-        val p = score(chars, wordsMastered, genreTerms)
+    fun rankFor(chars: Int, wordsMastered: Int, radicalsCultivated: Int, trackWords: Int): Rank {
+        val p = score(chars, wordsMastered, radicalsCultivated, trackWords)
         val ri = REALMS.indexOfLast { it.entryScore <= p }.coerceAtLeast(0)
         val realm = REALMS[ri]
         val nextRealm = REALMS.getOrNull(ri + 1)

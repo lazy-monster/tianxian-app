@@ -12,6 +12,9 @@ import com.scholar.app.data.repo.KnownRepository
 import com.scholar.app.data.segment.MaxMatchSegmenter
 import com.scholar.app.data.user.UserDatabase
 import com.scholar.app.reader.ingest.Ingestor
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 
 /**
  * Hand-rolled dependency graph (no Hilt) — fewer moving parts, so the project
@@ -42,4 +45,9 @@ class AppGraph(context: Context) {
         }
 
     val speaker by lazy { Speaker(app) }
+
+    /** Application-lifetime scope for fire-and-forget writes that must outlive a single screen —
+        e.g. sealing a freshly-learned batch into the review deck even if the user navigates away
+        before the inserts finish. */
+    val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 }

@@ -2,7 +2,9 @@ package com.scholar.app.ui.screen
 
 import android.graphics.BitmapFactory
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.LocalOverscrollConfiguration
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -63,7 +65,7 @@ private data class Popup(val word: String, val pinyin: String, val gloss: String
 /** One spoken unit: which text block, the char range within it, and the words to read. */
 private data class Utt(val block: Int, val range: IntRange, val text: String)
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun ReaderScreen(graph: AppGraph, bookId: String, onBack: () -> Unit, onOpenChar: (String) -> Unit) {
     val x = Theme.x
@@ -208,6 +210,9 @@ fun ReaderScreen(graph: AppGraph, bookId: String, onBack: () -> Unit, onOpenChar
                 return Offset.Zero
             }
             override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+                // Only a deliberate finger drag past the edge turns the page — never fling momentum
+                // that merely happens to reach the end. The reader stays in explicit control.
+                if (source != NestedScrollSource.UserInput) { overscroll = 0f; return Offset.Zero }
                 when {
                     available.y < 0f && !lazyState.canScrollForward -> {
                         overscroll += available.y
@@ -246,6 +251,10 @@ fun ReaderScreen(graph: AppGraph, bookId: String, onBack: () -> Unit, onOpenChar
     }
 
     Box(Modifier.fillMaxSize().background(palette.bg)) {
+        // Disable the stretch overscroll so that scroll deltas past a chapter edge are left
+        // *unconsumed* and reach our nestedScroll.onPostScroll — that's what powers
+        // "keep scrolling to continue". With overscroll on, the stretch silently eats them.
+        CompositionLocalProvider(LocalOverscrollConfiguration provides null) {
         LazyColumn(state = lazyState, modifier = Modifier.fillMaxSize().nestedScroll(nested).padding(horizontal = 22.dp),
             contentPadding = PaddingValues(top = 14.dp, bottom = 96.dp)) {
 
@@ -297,6 +306,7 @@ fun ReaderScreen(graph: AppGraph, bookId: String, onBack: () -> Unit, onOpenChar
                 }
             }
         }
+        }   // end CompositionLocalProvider (overscroll disabled)
 
         // floating controls: read-aloud + typography — auto-hide while scrolling down so they never
         // sit on top of the chapter-nav row at the bottom of the page

@@ -46,8 +46,10 @@ fun CultivationScreen(graph: AppGraph, onBack: () -> Unit, onOpenChar: (String) 
 
     val known by graph.known.knownCountFlow().collectAsStateWithLifecycle(0)
     val mastered by graph.cards.masteredCountFlow().collectAsStateWithLifecycle(0)
-    val genreLearned by graph.cards.genreLearnedCountFlow().collectAsStateWithLifecycle(0)
-    val rank = Cultivation.rankFor(known, mastered, genreLearned)
+    val studyTick by graph.settings.studyTick.collectAsStateWithLifecycle(0)
+    val radicalsCult = remember(studyTick) { graph.settings.radicalsCultivated() }
+    val trackWords = remember(studyTick) { graph.settings.trackWordsCultivated() }
+    val rank = Cultivation.rankFor(known, mastered, radicalsCult, trackWords)
 
     var lexicon by remember { mutableStateOf<Map<String, List<Term>>>(emptyMap()) }
     LaunchedEffect(Unit) {
@@ -101,12 +103,17 @@ fun CultivationScreen(graph: AppGraph, onBack: () -> Unit, onOpenChar: (String) 
 
         // ── breakdown of the blend ───────────────────────────────────────
         item {
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Contribution("Characters\nknown", known, "+$known", x.gold, Modifier.weight(1f))
-                Contribution("Words\nmastered", mastered, "+${(mastered * 0.2).toInt()}", x.jade, Modifier.weight(1f))
-                Contribution("Genre terms\nlearned", genreLearned, "+${(genreLearned * 0.5).toInt()}", x.cinnabar, Modifier.weight(1f))
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Contribution("Characters\nknown", known, "+$known", x.gold, Modifier.weight(1f))
+                    Contribution("Words\nmastered", mastered, "+${(mastered * 0.2).toInt()}", x.jade, Modifier.weight(1f))
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Contribution("Radicals\ncultivated", radicalsCult, "+${(radicalsCult * 0.5).toInt()}", x.cinnabar, Modifier.weight(1f))
+                    Contribution("Track words\nsealed", trackWords, "+${(trackWords * 0.4).toInt()}", x.jadeDeep, Modifier.weight(1f))
+                }
             }
-            Text("Your cultivation base blends all three — characters are the spine, mastered words add breadth, and genre terms count double toward fluency in the novels you actually read.",
+            Text("Your cultivation base blends study and review: characters known are the spine and mastered words add depth, while the gated trials — radicals and character groups — grant 修为 the moment you break through. So a day spent studying counts even before you review.",
                 color = x.textFaint, fontSize = 12.sp, lineHeight = 17.sp, modifier = Modifier.padding(top = 8.dp))
         }
 

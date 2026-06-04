@@ -29,13 +29,14 @@ import com.scholar.app.ui.theme.Ink
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-private data class StatusData(val known: Int, val due: Int, val mastered: Int, val genre: Int, val nextDue: Long?)
+private data class StatusData(val known: Int, val due: Int, val mastered: Int, val nextDue: Long?)
 
 /** Cultivation-status widget: your rank, characters known, and reviews due (or time to the next).
  *  Tap opens the review screen. */
 class StatusWidget : GlanceAppWidget() {
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val now = System.currentTimeMillis()
+        val settings = com.scholar.app.data.SettingsStore(context)
         val d = withContext(Dispatchers.IO) {
             runCatching {
                 val db = UserDatabase.get(context)
@@ -43,12 +44,12 @@ class StatusWidget : GlanceAppWidget() {
                     known = db.knownDao().knownCount(),
                     due = db.cardDao().dueCount(now),
                     mastered = db.cardDao().masteredCount(),
-                    genre = db.cardDao().genreLearnedCount(),
                     nextDue = db.cardDao().nextDueMillis(now),
                 )
-            }.getOrDefault(StatusData(0, 0, 0, 0, null))
+            }.getOrDefault(StatusData(0, 0, 0, null))
         }
-        val rank = Cultivation.rankFor(d.known, d.mastered, d.genre)
+        val rank = Cultivation.rankFor(d.known, d.mastered,
+            settings.radicalsCultivated(), settings.trackWordsCultivated())
         val (dueValue, dueLabel, dueDanger) = when {
             d.due > 0 -> Triple("${d.due}", "reviews due", true)
             d.nextDue != null -> Triple(untilLabel(d.nextDue - now), "till next", false)

@@ -37,9 +37,12 @@ fun TodayScreen(graph: AppGraph, onOpenReview: () -> Unit, onOpenLibrary: () -> 
     LaunchedEffect(reroll) { moment = withContext(Dispatchers.IO) { graph.dictionary.randomCharacter() } }
     val due by graph.cards.dueCountFlow().collectAsStateWithLifecycle(0)
     val mastered by graph.cards.masteredCountFlow().collectAsStateWithLifecycle(0)
-    val genreLearned by graph.cards.genreLearnedCountFlow().collectAsStateWithLifecycle(0)
+    val studyTick by graph.settings.studyTick.collectAsStateWithLifecycle(0)
     val books by graph.books.booksFlow().collectAsStateWithLifecycle(emptyList())
-    val rank = com.scholar.app.data.Cultivation.rankFor(known, mastered, genreLearned)
+    val rank = remember(known, mastered, studyTick) {
+        com.scholar.app.data.Cultivation.rankFor(known, mastered,
+            graph.settings.radicalsCultivated(), graph.settings.trackWordsCultivated())
+    }
 
     LazyColumn(Modifier.fillMaxSize().background(x.bg).padding(horizontal = 22.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)) {

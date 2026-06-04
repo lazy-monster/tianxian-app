@@ -29,8 +29,10 @@ private val SLIDES = listOf(
         "Start with the Pinyin & Tones lessons so every new word has a sound in your head. It takes an afternoon and saves months of confusion."),
     Slide("木", "Characters are built, not memorised",
         "Each character is made of components and radicals with real meanings. Scholar shows you the pieces, so 好 is 'woman + child', not random strokes."),
+    Slide("修", "Cultivate your rank",
+        "Follow the gated trials — radicals first, then characters in groups of 20 — drilling shape, sound and meaning. Score high enough to break through, seal the words into review, and climb the realm ladder from 炼气 to 渡劫. Studying advances your rank even on days you can't review."),
     Slide("书", "Then read what you love",
-        "Import any ebook — including xianxia and wuxia web novels. Tap any word for its meaning, mine it into spaced repetition, and watch your reading coverage climb."),
+        "Import any ebook — including xianxia and wuxia web novels. Tap any word for its meaning, mine it into spaced repetition, and watch your reading coverage climb. Your whole journey backs up to a single file you control (Settings → Backup)."),
 )
 
 @Composable
