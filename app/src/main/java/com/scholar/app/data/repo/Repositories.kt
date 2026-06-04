@@ -28,6 +28,7 @@ class DictionaryRepository(private val content: ContentStore) {
     fun lookup(word: String): DictEntry? = content.lookupWord(word)
     fun search(q: String) = content.search(q)
     fun character(ch: String): CharInfo? = content.character(ch)
+    fun randomCharacter(): CharInfo? = content.randomCharacter()
     fun toned(numericPinyin: String) = Pinyin.toned(numericPinyin)
     fun genreTerms(): List<GenreTerm> = content.genreTerms()
     fun radicals() = content.radicals()
@@ -70,6 +71,11 @@ class CardRepository(
     fun masteredCountFlow(): Flow<Int> = cardDao.masteredCountFlow()
     fun genreLearnedCountFlow(): Flow<Int> = cardDao.genreLearnedCountFlow()
     suspend fun due(limit: Int = 200): List<CardEntity> = cardDao.due(System.currentTimeMillis(), limit)
+
+    /** The soonest-due cards even if not due yet — for an optional "review ahead" session. */
+    suspend fun ahead(limit: Int = 30): List<CardEntity> = cardDao.ahead(limit)
+
+    suspend fun dueCountNow(): Int = cardDao.dueCount(System.currentTimeMillis())
 
     /** Of [fronts], the subset already present in the deck — lets the level lists show what's
         been mined and figure out the "next batch". */

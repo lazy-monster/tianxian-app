@@ -6,6 +6,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -27,20 +28,41 @@ import com.scholar.app.ui.theme.SerifSC
 import com.scholar.app.ui.theme.Theme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlin.random.Random
+
+private const val TRIAL_PASS = 85   // % needed to break through a radical batch and unlock the next
+
+private sealed interface RadMode {
+    data object Browse : RadMode
+    data object Cards : RadMode
+    data object Track : RadMode
+    data class Trial(val batch: Int) : RadMode
+}
 
 @Composable
 fun RadicalsScreen(graph: AppGraph, onBack: () -> Unit, onOpenChar: (String) -> Unit) {
     var radicals by remember { mutableStateOf<List<Radical>>(emptyList()) }
-    var studying by remember { mutableStateOf(false) }
+    var mode by remember { mutableStateOf<RadMode>(RadMode.Browse) }
 
     LaunchedEffect(Unit) { radicals = withContext(Dispatchers.IO) { graph.dictionary.radicals() } }
 
-    if (studying) {
-        RadicalFlashcards(graph, radicals, onExit = { studying = false })
-    } else {
-        RadicalsList(graph, radicals, onBack, onOpenChar, onStudy = { studying = true })
+    when (val m = mode) {
+        RadMode.Browse -> RadicalsList(graph, radicals, onBack, onOpenChar,
+            onFlashcards = { mode = RadMode.Cards }, onTrack = { mode = RadMode.Track })
+        RadMode.Cards -> RadicalFlashcards(graph, radicals, onExit = { mode = RadMode.Browse })
+        RadMode.Track -> RadicalTrackScreen(graph, radicals,
+            onExit = { mode = RadMode.Browse }, onTrial = { b -> mode = RadMode.Trial(b) })
+        is RadMode.Trial -> RadicalTrial(graph, radicals, m.batch, onExit = { mode = RadMode.Track })
     }
 }
+
+/** Concise meaning for quiz options — drops the parenthetical/variant notes that give answers away. */
+private fun shortMeaning(r: Radical): String =
+    r.meaning.substringBefore(" (").substringBefore(" / ").trim().ifEmpty { r.meaning }
+
+/** Batches of radicals (sorted by number) at the current batch size. */
+private fun batchesOf(radicals: List<Radical>, size: Int): List<List<Radical>> =
+    radicals.sortedBy { it.number }.chunked(size.coerceAtLeast(1))
 
 /** The everyday name shown to the user (common teaching name when it differs, else the reading). */
 private fun displayName(r: Radical, common: RadicalName?): String =
@@ -52,7 +74,7 @@ private fun speakTarget(r: Radical, common: RadicalName?): String = common?.name
 @Composable
 private fun RadicalsList(
     graph: AppGraph, radicals: List<Radical>,
-    onBack: () -> Unit, onOpenChar: (String) -> Unit, onStudy: () -> Unit,
+    onBack: () -> Unit, onOpenChar: (String) -> Unit, onFlashcards: () -> Unit, onTrack: () -> Unit,
 ) {
     val x = Theme.x
     var expanded by remember { mutableStateOf<Int?>(null) }
@@ -62,10 +84,16 @@ private fun RadicalsList(
         verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item {
             ScreenHeader("Radicals & Components", "The 214 Kangxi radicals are the semantic pieces characters are built from. Knowing them turns memorising into reading meaning. Tap one for example characters.", onBack)
-            // Flashcard study — learning only; these never enter your review deck.
-            Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(x.cinnabar)
-                .clickable { onStudy() }.padding(14.dp), contentAlignment = Alignment.Center) {
-                Text("⚡ Study with flashcards", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+            // Two study paths — both learning-only; radicals never enter your review deck.
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Box(Modifier.weight(1f).clip(RoundedCornerShape(14.dp)).background(x.surface2)
+                    .clickable { onFlashcards() }.padding(14.dp), contentAlignment = Alignment.Center) {
+                    Text("⚡ Flashcards", color = x.text, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                }
+                Box(Modifier.weight(1f).clip(RoundedCornerShape(14.dp)).background(x.cinnabar)
+                    .clickable { onTrack() }.padding(14.dp), contentAlignment = Alignment.Center) {
+                    Text("🧭 Cultivation trials", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                }
             }
             Spacer(Modifier.height(4.dp))
         }
@@ -223,5 +251,209 @@ private fun FlashButton(label: String, bg: Color, fg: Color, modifier: Modifier,
     Box(modifier.clip(RoundedCornerShape(16.dp)).background(bg).clickable { onClick() }
         .padding(vertical = 14.dp, horizontal = 20.dp), contentAlignment = Alignment.Center) {
         Text(label, color = fg, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+    }
+}
+
+/* ── Gated radical cultivation track ─────────────────────────────────────────────────────────
+   Radicals are split into batches ("trials"). Each can be drilled for a score; the track gates
+   progression — you only unlock the next trial by scoring ≥ TRIAL_PASS on the current frontier. */
+
+@Composable
+private fun RadicalTrackScreen(graph: AppGraph, radicals: List<Radical>, onExit: () -> Unit, onTrial: (Int) -> Unit) {
+    val x = Theme.x
+    val settings = graph.settings
+    val batches = remember(radicals, settings.radicalBatchSize) { batchesOf(radicals, settings.radicalBatchSize) }
+    val unlocked = settings.radicalUnlocked   // read live (refreshes when re-entering after a trial)
+
+    LazyColumn(Modifier.fillMaxSize().background(x.bg).padding(horizontal = 22.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        item {
+            ScreenHeader("Radical Cultivation", "The 214 radicals, split into trials. Score ${TRIAL_PASS}% on a trial to break through and unlock the next. Earlier trials stay open to re-drill.", onExit)
+        }
+        itemsIndexed(batches) { i, batch ->
+            val best = settings.radicalBestScore(i)
+            val locked = i > unlocked
+            val passed = best >= TRIAL_PASS
+            val isFrontier = i == unlocked && !passed
+            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
+                .background(if (isFrontier) x.surface2 else x.surface)
+                .clickable(enabled = !locked) { onTrial(i) }.padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(46.dp).clip(RoundedCornerShape(12.dp))
+                    .background(if (locked) x.surface else x.bg), contentAlignment = Alignment.Center) {
+                    Text(if (locked) "🔒" else "${i + 1}", fontFamily = SerifSC,
+                        fontSize = if (locked) 18.sp else 20.sp, color = if (passed) x.jade else x.gold)
+                }
+                Spacer(Modifier.width(14.dp))
+                Column(Modifier.weight(1f)) {
+                    Text("Trial ${i + 1}  ·  radicals ${batch.first().number}–${batch.last().number}",
+                        color = if (locked) x.textFaint else x.text, fontWeight = FontWeight.Medium, fontSize = 15.sp)
+                    Text(batch.take(8).joinToString(" ") { it.radical }, fontFamily = SerifSC,
+                        color = if (locked) x.textFaint else x.textSoft, fontSize = 15.sp, maxLines = 1)
+                    if (best > 0) {
+                        Spacer(Modifier.height(6.dp))
+                        Box(Modifier.fillMaxWidth().height(5.dp).clip(RoundedCornerShape(5.dp)).background(x.bg)) {
+                            Box(Modifier.fillMaxWidth(best / 100f).fillMaxHeight()
+                                .clip(RoundedCornerShape(5.dp)).background(if (passed) x.jade else x.gold))
+                        }
+                    }
+                }
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    when {
+                        passed -> "✓ $best%"
+                        locked -> ""
+                        best > 0 -> "$best%"
+                        isFrontier -> "begin ›"
+                        else -> "›"
+                    },
+                    color = if (passed) x.jade else x.textSoft, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+            }
+        }
+        item { Spacer(Modifier.height(24.dp)) }
+    }
+}
+
+/** One multiple-choice question — either glyph→meaning or meaning→glyph. */
+private data class RQuestion(val prompt: Radical, val glyphToMeaning: Boolean, val options: List<String>, val answer: String)
+
+private fun buildTrial(batch: List<Radical>, all: List<Radical>): List<RQuestion> =
+    batch.map { r ->
+        if (Random.nextBoolean()) {
+            val correct = shortMeaning(r)
+            val distract = all.asSequence().filter { it.number != r.number }.map { shortMeaning(it) }
+                .distinct().filter { it != correct }.toList().shuffled().take(3)
+            RQuestion(r, true, (distract + correct).shuffled(), correct)
+        } else {
+            val correct = r.radical
+            val distract = all.asSequence().filter { it.number != r.number }.map { it.radical }
+                .distinct().filter { it != correct }.toList().shuffled().take(3)
+            RQuestion(r, false, (distract + correct).shuffled(), correct)
+        }
+    }.shuffled()
+
+@Composable
+private fun RadicalTrial(graph: AppGraph, radicals: List<Radical>, batchIndex: Int, onExit: () -> Unit) {
+    val x = Theme.x
+    val settings = graph.settings
+    val batches = remember(radicals, settings.radicalBatchSize) { batchesOf(radicals, settings.radicalBatchSize) }
+    val batch = batches.getOrNull(batchIndex)
+
+    if (batch == null || batch.isEmpty()) {
+        Box(Modifier.fillMaxSize().background(x.bg), Alignment.Center) {
+            Text("‹ back", color = x.gold, fontSize = 14.sp, modifier = Modifier.clickable { onExit() })
+        }
+        return
+    }
+
+    var attempt by remember { mutableStateOf(0) }
+    val questions = remember(batchIndex, attempt) { buildTrial(batch, radicals) }
+    var qIdx by remember(attempt) { mutableStateOf(0) }
+    var selected by remember(attempt) { mutableStateOf<String?>(null) }
+    var score by remember(attempt) { mutableStateOf(0) }
+    var finished by remember(attempt) { mutableStateOf(false) }
+    var finishedPct by remember(attempt) { mutableStateOf(0) }
+    var brokeThrough by remember(attempt) { mutableStateOf(false) }
+
+    Column(Modifier.fillMaxSize().background(x.bg).padding(22.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("‹ trials", color = x.gold, fontSize = 14.sp, modifier = Modifier.clickable { onExit() })
+            Spacer(Modifier.width(14.dp))
+            if (!finished) {
+                Text("${qIdx + 1} / ${questions.size}", color = x.textSoft, fontSize = 12.sp)
+                Spacer(Modifier.width(10.dp))
+                Box(Modifier.weight(1f).height(6.dp).clip(RoundedCornerShape(6.dp)).background(x.surface)) {
+                    Box(Modifier.fillMaxWidth(qIdx.toFloat() / questions.size).fillMaxHeight()
+                        .clip(RoundedCornerShape(6.dp)).background(x.gold))
+                }
+            } else Spacer(Modifier.weight(1f))
+        }
+        Spacer(Modifier.height(24.dp))
+
+        if (finished) {
+            val passed = finishedPct >= TRIAL_PASS
+            Box(Modifier.weight(1f).fillMaxWidth(), Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(if (brokeThrough) "突破！" else if (passed) "通过" else "未过",
+                        fontFamily = SerifSC, fontSize = 34.sp, color = if (passed) x.jade else x.cinnabar)
+                    Spacer(Modifier.height(10.dp))
+                    Text("$finishedPct%  ·  $score / ${questions.size}", color = x.text, fontSize = 18.sp, fontWeight = FontWeight.Medium)
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        when {
+                            brokeThrough -> "Breakthrough — the next trial is unlocked."
+                            passed -> "Passed. Re-drill any time to keep it sharp."
+                            else -> "Reach ${TRIAL_PASS}% to break through. Almost there — try again."
+                        },
+                        color = x.textSoft, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 24.dp))
+                    Spacer(Modifier.height(24.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        FlashButton("↻ Retry", x.surface, x.gold, Modifier) { attempt++ }
+                        FlashButton("Trials", x.cinnabar, Color.White, Modifier) { onExit() }
+                    }
+                }
+            }
+            return@Column
+        }
+
+        val q = questions[qIdx]
+        val optScroll = rememberScrollState()
+        LaunchedEffect(qIdx) { optScroll.scrollTo(0) }
+        // prompt + options scroll if they don't fit, so the Next button is always reachable
+        Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(optScroll)) {
+        Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(x.surface2).padding(vertical = 28.dp),
+            contentAlignment = Alignment.Center) {
+            if (q.glyphToMeaning) {
+                Text(q.prompt.radical, fontFamily = SerifSC, fontWeight = FontWeight.SemiBold, fontSize = 88.sp, color = x.text)
+            } else {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("which radical means", color = x.textFaint, fontSize = 12.sp, letterSpacing = 1.sp)
+                    Spacer(Modifier.height(8.dp))
+                    Text(shortMeaning(q.prompt), color = x.gold, fontSize = 26.sp, fontWeight = FontWeight.Medium)
+                }
+            }
+        }
+        Spacer(Modifier.height(20.dp))
+
+        // options
+        q.options.forEach { opt ->
+            val reveal = selected != null
+            val isAnswer = opt == q.answer
+            val bg = when {
+                reveal && isAnswer -> x.jade
+                reveal && opt == selected -> x.cinnabar
+                else -> x.surface
+            }
+            val fg = if (reveal && (isAnswer || opt == selected)) Color.White else x.text
+            Box(Modifier.fillMaxWidth().padding(vertical = 5.dp).clip(RoundedCornerShape(14.dp))
+                .background(bg).clickable(enabled = selected == null) {
+                    selected = opt; if (opt == q.answer) score++
+                }.padding(vertical = 15.dp, horizontal = 16.dp), contentAlignment = Alignment.Center) {
+                Text(opt, fontFamily = if (q.glyphToMeaning) SerifSC else SerifSC,
+                    fontSize = if (q.glyphToMeaning) 16.sp else 30.sp, color = fg,
+                    fontWeight = if (q.glyphToMeaning) FontWeight.Normal else FontWeight.SemiBold)
+            }
+        }
+        }   // end scrollable prompt+options column
+
+        Spacer(Modifier.height(12.dp))
+        if (selected != null) {
+            FlashButton(if (qIdx < questions.lastIndex) "Next →" else "Finish", x.gold, Color.White,
+                Modifier.fillMaxWidth()) {
+                if (qIdx < questions.lastIndex) { qIdx++; selected = null }
+                else {
+                    val pct = score * 100 / questions.size
+                    finishedPct = pct
+                    settings.setRadicalBestScore(batchIndex, pct)
+                    if (pct >= TRIAL_PASS && batchIndex == settings.radicalUnlocked) {
+                        settings.radicalUnlocked = batchIndex + 1
+                        brokeThrough = true
+                    }
+                    finished = true
+                }
+            }
+        } else {
+            Spacer(Modifier.height(52.dp))
+        }
     }
 }

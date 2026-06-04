@@ -1,9 +1,13 @@
 package com.scholar.app.ui.screen
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -41,11 +45,17 @@ fun SettingsScreen(graph: AppGraph, dark: Boolean, onToggleTheme: () -> Unit, on
 
     var retention by remember { mutableStateOf(settings.desiredRetention) }
     var hskBatch by remember { mutableStateOf(settings.hskBatchSize) }
+    var radicalBatch by remember { mutableStateOf(settings.radicalBatchSize) }
+    var remindersOn by remember { mutableStateOf(settings.remindersEnabled) }
     var autoBackup by remember { mutableStateOf(settings.autoBackup) }
     var backupDir by remember { mutableStateOf(settings.backupTreeUri) }
     var intervalHours by remember { mutableStateOf(settings.backupIntervalHours) }
     var status by remember { mutableStateOf<String?>(null) }
     var showReset by remember { mutableStateOf(false) }
+
+    // Notification permission (Android 13+), requested when reminders are switched on.
+    val notifPermLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()) {}
 
     // Export: write the backup JSON to a file the user picks.
     val exportLauncher = rememberLauncherForActivityResult(
@@ -146,6 +156,49 @@ fun SettingsScreen(graph: AppGraph, dark: Boolean, onToggleTheme: () -> Unit, on
                 Text("5", color = x.textFaint, fontSize = 11.sp)
                 Text("100", color = x.textFaint, fontSize = 11.sp)
             }
+        }
+
+        // ── Radical trial batch size ─────────────────────────────────────
+        Spacer(Modifier.height(12.dp))
+        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(x.surface).padding(16.dp)) {
+            Text("Radicals per trial", color = x.text, fontWeight = FontWeight.Medium, fontSize = 15.sp)
+            Text("How many radicals each Cultivation trial covers. Changing this re-forms the trials and " +
+                "resets track progress.", color = x.textSoft, fontSize = 13.sp, lineHeight = 19.sp)
+            Spacer(Modifier.height(10.dp))
+            Text("$radicalBatch per trial", color = x.gold, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+            Slider(
+                value = radicalBatch.toFloat(), onValueChange = { radicalBatch = it.roundToInt() },
+                onValueChangeFinished = { settings.radicalBatchSize = radicalBatch; radicalBatch = settings.radicalBatchSize },
+                valueRange = 5f..40f, steps = 6,   // 5,10,…,40
+                colors = SliderDefaults.colors(thumbColor = x.cinnabar, activeTrackColor = x.cinnabar,
+                    inactiveTrackColor = x.surface2),
+            )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("5", color = x.textFaint, fontSize = 11.sp)
+                Text("40", color = x.textFaint, fontSize = 11.sp)
+            }
+        }
+
+        // ── Reminders ────────────────────────────────────────────────────
+        Spacer(Modifier.height(12.dp))
+        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(x.surface).padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Review reminders", color = x.text, fontWeight = FontWeight.Medium, fontSize = 15.sp)
+                Text("A daily nudge when reviews are ready, or if you've gone quiet.", color = x.textSoft, fontSize = 13.sp)
+            }
+            Switch(checked = remindersOn, onCheckedChange = { on ->
+                remindersOn = on; settings.remindersEnabled = on
+                if (on) {
+                    com.scholar.app.notify.Reminders.schedule(context)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS)
+                        != PackageManager.PERMISSION_GRANTED) {
+                        notifPermLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    }
+                } else com.scholar.app.notify.Reminders.cancel(context)
+            }, colors = SwitchDefaults.colors(checkedThumbColor = x.gold, checkedTrackColor = x.cinnabarDeep,
+                uncheckedThumbColor = x.textSoft, uncheckedTrackColor = x.surface2))
         }
 
         // ── Backup & restore ─────────────────────────────────────────────

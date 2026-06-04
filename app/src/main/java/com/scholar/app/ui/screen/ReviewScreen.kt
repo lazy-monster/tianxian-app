@@ -32,8 +32,24 @@ fun ReviewScreen(graph: AppGraph, onOpenChar: (String) -> Unit = {}) {
     var flipped by remember { mutableStateOf(false) }
     var loading by remember { mutableStateOf(true) }
     var reviewed by remember { mutableStateOf(0) }
+    var correct by remember { mutableStateOf(0) }      // graded better than Again
+    var ahead by remember { mutableStateOf(false) }    // this session pulled not-yet-due cards
+    var deckHasCards by remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) { queue = graph.cards.due(); loading = false }
+    LaunchedEffect(Unit) {
+        val due = graph.cards.due()
+        queue = due
+        deckHasCards = due.isNotEmpty() || graph.cards.ahead(1).isNotEmpty()
+        loading = false
+    }
+
+    // Start an optional "review ahead" run: drill the soonest cards even though they're not due yet.
+    fun reviewAhead() {
+        scope.launch {
+            val q = graph.cards.ahead(20)
+            queue = q; idx = 0; reviewed = 0; correct = 0; flipped = false; ahead = true
+        }
+    }
 
     if (loading) {
         Box(Modifier.fillMaxSize().background(x.bg), Alignment.Center) { CircularProgressIndicator(color = x.cinnabar) }
@@ -41,12 +57,29 @@ fun ReviewScreen(graph: AppGraph, onOpenChar: (String) -> Unit = {}) {
     }
     val card = queue.getOrNull(idx)
     if (card == null) {
-        Box(Modifier.fillMaxSize().background(x.bg), Alignment.Center) {
+        Box(Modifier.fillMaxSize().background(x.bg).padding(22.dp), Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(if (reviewed > 0) "复习完毕" else "无卡片", fontFamily = SerifSC, fontSize = 30.sp, color = x.gold)
                 Spacer(Modifier.height(8.dp))
-                Text(if (reviewed > 0) "Reviewed $reviewed cards. Rest your eyes." else "Mine words while reading to build your deck.",
-                    color = x.textSoft, fontSize = 14.sp)
+                Text(
+                    when {
+                        reviewed > 0 -> "Reviewed $reviewed · ${(100 * correct / reviewed)}% recalled" +
+                            if (ahead) " (ahead)" else ""
+                        deckHasCards -> "Nothing due right now — well rested."
+                        else -> "Mine words while reading to build your deck."
+                    },
+                    color = x.textSoft, fontSize = 14.sp,
+                )
+                if (deckHasCards) {
+                    Spacer(Modifier.height(22.dp))
+                    Box(Modifier.clip(RoundedCornerShape(16.dp)).background(x.surface)
+                        .clickable { reviewAhead() }.padding(horizontal = 22.dp, vertical = 13.dp)) {
+                        Text("⚡ Review ahead", color = x.gold, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Text("Drill the next cards early — they'll reschedule as normal.",
+                        color = x.textFaint, fontSize = 12.sp)
+                }
             }
         }
         return
@@ -105,10 +138,10 @@ fun ReviewScreen(graph: AppGraph, onOpenChar: (String) -> Unit = {}) {
         Spacer(Modifier.height(16.dp))
         if (flipped) {
             Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-                GradeButton(projections, Rating.AGAIN, "Again", x.cinnabar, Modifier.weight(1f)) { grade(graph, scope, card, it) { idx++; flipped = false; reviewed++ } }
-                GradeButton(projections, Rating.HARD, "Hard", x.gold, Modifier.weight(1f)) { grade(graph, scope, card, it) { idx++; flipped = false; reviewed++ } }
-                GradeButton(projections, Rating.GOOD, "Good", x.jade, Modifier.weight(1f)) { grade(graph, scope, card, it) { idx++; flipped = false; reviewed++ } }
-                GradeButton(projections, Rating.EASY, "Easy", Color(0xFF6FA3C4), Modifier.weight(1f)) { grade(graph, scope, card, it) { idx++; flipped = false; reviewed++ } }
+                GradeButton(projections, Rating.AGAIN, "Again", x.cinnabar, Modifier.weight(1f)) { grade(graph, scope, card, it) { idx++; flipped = false; reviewed++; if (it != Rating.AGAIN) correct++ } }
+                GradeButton(projections, Rating.HARD, "Hard", x.gold, Modifier.weight(1f)) { grade(graph, scope, card, it) { idx++; flipped = false; reviewed++; if (it != Rating.AGAIN) correct++ } }
+                GradeButton(projections, Rating.GOOD, "Good", x.jade, Modifier.weight(1f)) { grade(graph, scope, card, it) { idx++; flipped = false; reviewed++; if (it != Rating.AGAIN) correct++ } }
+                GradeButton(projections, Rating.EASY, "Easy", Color(0xFF6FA3C4), Modifier.weight(1f)) { grade(graph, scope, card, it) { idx++; flipped = false; reviewed++; if (it != Rating.AGAIN) correct++ } }
             }
         } else {
             Spacer(Modifier.height(58.dp))

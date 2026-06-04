@@ -1,6 +1,7 @@
 package com.scholar.app.ui.screen
 
 import android.graphics.BitmapFactory
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -18,9 +19,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.SpanStyle
@@ -48,6 +53,9 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+
+/** Cumulative overscroll (pixels) past a chapter edge before flowing to the adjacent chapter. */
+private const val CHAPTER_ADVANCE_PX = 220f
 
 private data class Tok(val text: String, val isWord: Boolean, val start: Int, val end: Int)
 private data class Popup(val word: String, val pinyin: String, val gloss: String,
@@ -87,6 +95,7 @@ fun ReaderScreen(graph: AppGraph, bookId: String, onBack: () -> Unit, onOpenChar
     var speakRange by remember { mutableStateOf<IntRange?>(null) }
     var pendingAutoplay by remember { mutableStateOf(false) }
     var restoreBlock by remember { mutableStateOf(-1) }   // scroll target from the saved position, once
+    var chromeVisible by remember { mutableStateOf(true) }   // floating controls auto-hide while reading
 
     // load document + known set off the main thread, then restore the saved position
     LaunchedEffect(bookId) {
@@ -175,6 +184,46 @@ fun ReaderScreen(graph: AppGraph, bookId: String, onBack: () -> Unit, onOpenChar
         )
     }
 
+    fun goNext() {
+        if (chapterIdx < chapters.lastIndex) {
+            stopPlay(); chapterIdx++; chromeVisible = true
+            scope.launch { graph.books.savePosition(bookId, chapterIdx, 0); lazyState.scrollToItem(0) }
+        }
+    }
+    fun goPrev() {
+        if (chapterIdx > 0) {
+            stopPlay(); chapterIdx--; chromeVisible = true
+            scope.launch { graph.books.savePosition(bookId, chapterIdx, 0); lazyState.scrollToItem(0) }
+        }
+    }
+
+    // Auto-hide the floating controls while reading, and let scrolling past either end "break
+    // through" to the adjacent chapter (continuous reading without hunting for the nav buttons).
+    val nested = remember(lazyState) {
+        object : NestedScrollConnection {
+            var overscroll = 0f
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                if (available.y < -2f && !speaking) chromeVisible = false   // keep controls during read-aloud
+                else if (available.y > 2f) chromeVisible = true
+                return Offset.Zero
+            }
+            override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+                when {
+                    available.y < 0f && !lazyState.canScrollForward -> {
+                        overscroll += available.y
+                        if (overscroll < -CHAPTER_ADVANCE_PX) { overscroll = 0f; goNext() }
+                    }
+                    available.y > 0f && !lazyState.canScrollBackward -> {
+                        overscroll += available.y
+                        if (overscroll > CHAPTER_ADVANCE_PX) { overscroll = 0f; goPrev() }
+                    }
+                    else -> overscroll = 0f
+                }
+                return Offset.Zero
+            }
+        }
+    }
+
     // continue read-aloud into a freshly auto-advanced chapter
     LaunchedEffect(chapterIdx) {
         if (pendingAutoplay) { pendingAutoplay = false; play(0) }
@@ -197,7 +246,7 @@ fun ReaderScreen(graph: AppGraph, bookId: String, onBack: () -> Unit, onOpenChar
     }
 
     Box(Modifier.fillMaxSize().background(palette.bg)) {
-        LazyColumn(state = lazyState, modifier = Modifier.fillMaxSize().padding(horizontal = 22.dp),
+        LazyColumn(state = lazyState, modifier = Modifier.fillMaxSize().nestedScroll(nested).padding(horizontal = 22.dp),
             contentPadding = PaddingValues(top = 14.dp, bottom = 96.dp)) {
 
             item {
@@ -236,24 +285,28 @@ fun ReaderScreen(graph: AppGraph, bookId: String, onBack: () -> Unit, onOpenChar
             item {
                 Spacer(Modifier.height(24.dp))
                 Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
-                    NavBtn("‹ prev", enabled = chapterIdx > 0) {
-                        stopPlay(); chapterIdx--; scope.launch { graph.books.savePosition(bookId, chapterIdx, 0); lazyState.scrollToItem(0) }
-                    }
+                    NavBtn("‹ prev", enabled = chapterIdx > 0) { goPrev() }
                     Text("${chapterIdx + 1} / ${chapters.size}", color = palette.textSoft, fontSize = 13.sp,
                         modifier = Modifier.align(Alignment.CenterVertically))
-                    NavBtn("next ›", enabled = chapterIdx < chapters.lastIndex) {
-                        stopPlay(); chapterIdx++; scope.launch { graph.books.savePosition(bookId, chapterIdx, 0); lazyState.scrollToItem(0) }
-                    }
+                    NavBtn("next ›", enabled = chapterIdx < chapters.lastIndex) { goNext() }
+                }
+                if (chapterIdx < chapters.lastIndex) {
+                    Spacer(Modifier.height(8.dp))
+                    Text("keep scrolling to continue ↓", color = palette.textFaint, fontSize = 11.sp,
+                        modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                 }
             }
         }
 
-        // floating controls: read-aloud + typography
-        Column(Modifier.align(Alignment.BottomEnd).padding(18.dp), horizontalAlignment = Alignment.End,
-            verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            RoundBtn("Aa", x.surface2, x.text) { showControls = true }
-            RoundBtn(if (speaking) "❚❚" else "▶", x.cinnabar, Color.White) {
-                if (speaking) stopPlay() else play(0)
+        // floating controls: read-aloud + typography — auto-hide while scrolling down so they never
+        // sit on top of the chapter-nav row at the bottom of the page
+        AnimatedVisibility(visible = chromeVisible, modifier = Modifier.align(Alignment.BottomEnd)) {
+            Column(Modifier.padding(18.dp), horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                RoundBtn("Aa", x.surface2, x.text) { showControls = true }
+                RoundBtn(if (speaking) "❚❚" else "▶", x.cinnabar, Color.White) {
+                    if (speaking) stopPlay() else play(0)
+                }
             }
         }
 

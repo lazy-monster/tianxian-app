@@ -60,8 +60,25 @@ interface CardDao {
     @Query("SELECT * FROM cards WHERE suspended=0 AND dueEpochMillis<=:now ORDER BY dueEpochMillis LIMIT :limit")
     suspend fun due(now: Long, limit: Int = 200): List<CardEntity>
 
+    /** Soonest-due cards regardless of whether they're due yet — powers "review ahead". */
+    @Query("SELECT * FROM cards WHERE suspended=0 ORDER BY dueEpochMillis LIMIT :limit")
+    suspend fun ahead(limit: Int = 30): List<CardEntity>
+
     @Query("SELECT COUNT(*) FROM cards WHERE suspended=0 AND dueEpochMillis<=:now")
     fun dueCountFlow(now: Long): Flow<Int>
+
+    @Query("SELECT COUNT(*) FROM cards WHERE suspended=0 AND dueEpochMillis<=:now")
+    suspend fun dueCount(now: Long): Int
+
+    /** Soonest future due time after [now], for a widget "next review in …" countdown. */
+    @Query("SELECT MIN(dueEpochMillis) FROM cards WHERE suspended=0 AND dueEpochMillis>:now")
+    suspend fun nextDueMillis(now: Long): Long?
+
+    @Query("SELECT COUNT(*) FROM cards WHERE suspended=0 AND stability>=:minStability")
+    suspend fun masteredCount(minStability: Double = 21.0): Int
+
+    @Query("SELECT COUNT(*) FROM cards WHERE suspended=0 AND stability>=:minStability AND (source LIKE 'Genre%' OR source LIKE 'Realm%')")
+    suspend fun genreLearnedCount(minStability: Double = 7.0): Int
 
     @Query("SELECT * FROM cards WHERE frontRef=:front AND type=:type LIMIT 1")
     suspend fun find(front: String, type: String): CardEntity?
@@ -91,6 +108,7 @@ interface CardDao {
 interface ReviewLogDao {
     @Insert suspend fun insert(log: ReviewLogEntity)
     @Query("SELECT COUNT(*) FROM review_log WHERE reviewedAtMillis>=:since") suspend fun countSince(since: Long): Int
+    @Query("SELECT MAX(reviewedAtMillis) FROM review_log") suspend fun lastReviewMillis(): Long?
 
     // backup / restore
     @Query("SELECT * FROM review_log") suspend fun all(): List<ReviewLogEntity>
@@ -105,6 +123,9 @@ interface KnownDao {
 
     @Query("SELECT char FROM known_chars WHERE strength>=:threshold")
     suspend fun knownChars(threshold: Double = 0.6): List<String>
+
+    @Query("SELECT COUNT(*) FROM known_chars WHERE strength>=:threshold")
+    suspend fun knownCount(threshold: Double = 0.6): Int
 
     @Upsert suspend fun upsert(known: KnownCharEntity)
 

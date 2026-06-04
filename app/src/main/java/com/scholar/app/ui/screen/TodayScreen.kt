@@ -8,8 +8,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -17,18 +16,25 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.scholar.app.data.content.CharInfo
 import com.scholar.app.data.user.BookEntity
 import com.scholar.app.di.AppGraph
 import com.scholar.app.ui.theme.SerifSC
 import com.scholar.app.ui.theme.Theme
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 private const val FIRST_NOVEL_TARGET = 1000
 
 @Composable
 fun TodayScreen(graph: AppGraph, onOpenReview: () -> Unit, onOpenLibrary: () -> Unit,
-                onOpenLearn: () -> Unit, onOpenSettings: () -> Unit, onOpenBook: (String) -> Unit) {
+                onOpenLearn: () -> Unit, onOpenSettings: () -> Unit, onOpenBook: (String) -> Unit,
+                onOpenChar: (String) -> Unit = {}) {
     val x = Theme.x
     val known by graph.known.knownCountFlow().collectAsStateWithLifecycle(0)
+    var reroll by remember { mutableStateOf(0) }
+    var moment by remember { mutableStateOf<CharInfo?>(null) }
+    LaunchedEffect(reroll) { moment = withContext(Dispatchers.IO) { graph.dictionary.randomCharacter() } }
     val due by graph.cards.dueCountFlow().collectAsStateWithLifecycle(0)
     val mastered by graph.cards.masteredCountFlow().collectAsStateWithLifecycle(0)
     val genreLearned by graph.cards.genreLearnedCountFlow().collectAsStateWithLifecycle(0)
@@ -73,6 +79,27 @@ fun TodayScreen(graph: AppGraph, onOpenReview: () -> Unit, onOpenLibrary: () -> 
             Row(horizontalArrangement = Arrangement.spacedBy(13.dp)) {
                 StatCard("Reviews due", "$due", "cards", x.cinnabar, Modifier.weight(1f), onOpenReview)
                 StatCard("Library", "${books.size}", "books", x.gold, Modifier.weight(1f), onOpenLibrary)
+            }
+        }
+
+        moment?.let { ci ->
+            item {
+                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(x.surface)
+                    .clickable { reroll++ }.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(56.dp).clip(RoundedCornerShape(14.dp)).background(x.surface2)
+                        .clickable { onOpenChar(ci.char) }, contentAlignment = Alignment.Center) {
+                        Text(ci.char, fontFamily = SerifSC, fontSize = 32.sp, color = x.gold)
+                    }
+                    Spacer(Modifier.width(14.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("CHARACTER OF THE MOMENT", color = x.textFaint, fontSize = 10.sp, letterSpacing = 2.sp)
+                        Spacer(Modifier.height(2.dp))
+                        Text(ci.pinyin.ifBlank { "—" }, color = x.text, fontWeight = FontWeight.Medium, fontSize = 15.sp)
+                        Text(ci.definition.substringBefore(",").substringBefore("/").trim().take(40),
+                            color = x.textSoft, fontSize = 12.sp, maxLines = 1)
+                    }
+                    Text("↻", color = x.textFaint, fontSize = 20.sp)
+                }
             }
         }
 

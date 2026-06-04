@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">Scholar</string>
+    <string name="widget_character_desc">A rotating character with its reading and meaning.</string>
+    <string name="widget_status_desc">Your cultivation rank, characters known, and reviews due.</string>
 </resources>

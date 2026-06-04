@@ -13,6 +13,8 @@ activity = "1.9.2"
 pdfbox = "2.0.27.0"
 mlkitChinese = "16.0.1"
 coreKtx = "1.13.1"
+glance = "1.1.1"
+work = "2.9.1"
 
 [libraries]
 core-ktx = { module = "androidx.core:core-ktx", version.ref = "coreKtx" }
@@ -33,6 +35,8 @@ room-compiler = { module = "androidx.room:room-compiler", version.ref = "room" }
 coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
 pdfbox-android = { module = "com.tom-roush:pdfbox-android", version.ref = "pdfbox" }
 mlkit-text-chinese = { module = "com.google.mlkit:text-recognition-chinese", version.ref = "mlkitChinese" }
+glance-appwidget = { module = "androidx.glance:glance-appwidget", version.ref = "glance" }
+work-runtime-ktx = { module = "androidx.work:work-runtime-ktx", version.ref = "work" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

@@ -47,7 +47,10 @@ class BackupManager(
             .put("readerFontSizeSp", settings.readerFontSizeSp)
             .put("readerLineHeight", settings.readerLineHeight.toDouble())
             .put("readerThemeKey", settings.readerThemeKey)
-            .put("readerTtsRate", settings.readerTtsRate.toDouble()))
+            .put("readerTtsRate", settings.readerTtsRate.toDouble())
+            .put("radicalBatchSize", settings.radicalBatchSize)
+            .put("radicalUnlocked", settings.radicalUnlocked)
+            .put("remindersEnabled", settings.remindersEnabled))
 
         root.put("cards", JSONArray().apply {
             db.cardDao().all().forEach { c ->
@@ -100,6 +103,10 @@ class BackupManager(
             if (s.has("readerLineHeight")) settings.readerLineHeight = s.getDouble("readerLineHeight").toFloat()
             if (s.has("readerThemeKey")) settings.readerThemeKey = s.getString("readerThemeKey")
             if (s.has("readerTtsRate")) settings.readerTtsRate = s.getDouble("readerTtsRate").toFloat()
+            // batch size first — its setter resets radical progress when it changes
+            if (s.has("radicalBatchSize")) settings.radicalBatchSize = s.getInt("radicalBatchSize")
+            if (s.has("radicalUnlocked")) settings.radicalUnlocked = s.getInt("radicalUnlocked")
+            if (s.has("remindersEnabled")) settings.remindersEnabled = s.getBoolean("remindersEnabled")
         }
 
         val cards = root.optJSONArray("cards")?.mapObjects { o ->

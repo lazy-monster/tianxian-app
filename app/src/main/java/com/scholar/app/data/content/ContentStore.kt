@@ -81,6 +81,14 @@ class ContentStore private constructor(
             "FROM character WHERE char=?", arrayOf(ch)
     ).use { if (it.moveToFirst()) it.toCharInfo() else null }
 
+    /** A random reasonably-common character (has a frequency rank + gloss) — for the home card
+        and the widget's rotating "character of the moment". */
+    fun randomCharacter(): CharInfo? = db.rawQuery(
+        "SELECT char,pinyin,definition,decomposition,radical,stroke_count,hsk3,freq_rank " +
+            "FROM character WHERE freq_rank IS NOT NULL AND definition IS NOT NULL AND definition<>'' " +
+            "ORDER BY RANDOM() LIMIT 1", null
+    ).use { if (it.moveToFirst()) it.toCharInfo() else null }
+
     /** Component characters of a character, parsed from its IDS decomposition string. */
     fun components(ch: String): List<CharInfo> {
         val decomp = character(ch)?.decomposition ?: return emptyList()

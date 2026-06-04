@@ -6,6 +6,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -31,9 +32,11 @@ private val TABS = listOf(
 )
 
 @Composable
-fun ScholarRoot(graph: AppGraph, dark: Boolean, onToggleTheme: () -> Unit) {
+fun ScholarRoot(graph: AppGraph, dark: Boolean, onToggleTheme: () -> Unit, startRoute: String? = null) {
     val nav = rememberNavController()
     val x = Theme.x
+    // Deep-link from a notification or widget tap: jump to the requested route once on launch.
+    LaunchedEffect(startRoute) { if (!startRoute.isNullOrBlank()) runCatching { nav.navigate(startRoute) } }
     val current = nav.currentBackStackEntryAsState().value?.destination
     val route = current?.route
     // Keep the tab bar (so Home is always one tap away) on the top-level tabs and on the
@@ -78,7 +81,8 @@ fun ScholarRoot(graph: AppGraph, dark: Boolean, onToggleTheme: () -> Unit) {
                     onOpenLibrary = { nav.navigate("read") },
                     onOpenLearn = { nav.navigate("learn") },
                     onOpenSettings = { nav.navigate("settings") },
-                    onOpenBook = { id -> nav.navigate("reader/$id") })
+                    onOpenBook = { id -> nav.navigate("reader/$id") },
+                    onOpenChar = { ch -> nav.navigate("char/$ch") })
             }
             composable("learn") { LearnScreen(graph, onOpen = { route -> nav.navigate(route) }) }
             composable("learn/pinyin") { PinyinScreen(graph, onBack = { nav.popBackStack() }) }

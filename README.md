@@ -27,11 +27,13 @@ offline. No account, no subscription, no ads.
 
 - **Pinyin & Tones** — the sound system, every example tappable to hear it.
 - **Radicals & Components** — all 214 Kangxi radicals with meanings, each expandable to
-  show the common characters built from it, and a flashcard mode for drilling them (study
-  only — radicals never enter your review deck). Each shows its everyday teaching name
-  (氵 *三点水*, 宀 *宝盖头*) alongside the formal reading, since that's what they're actually
-  called. Every character screen breaks the character into its components (好 = 女 *woman* +
-  子 *child*), so you learn structure, not strokes.
+  show the common characters built from it. Two study paths (both learning-only — radicals
+  never enter your review deck): a **flashcard** mode, and **Cultivation trials** — the
+  radicals split into batches (size configurable, default 20) drilled as a multiple-choice
+  trial that scores you; score 85%+ to *break through* and unlock the next trial, so you
+  climb the 214 in gated steps. Each radical shows its everyday teaching name (氵 *三点水*,
+  宀 *宝盖头*) alongside the formal reading. Every character screen breaks the character into
+  its components (好 = 女 *woman* + 子 *child*), so you learn structure, not strokes.
 - **Vocabulary by Level** — HSK 1 → 9 word lists, ordered by real-world frequency, with
   one-tap mining into your review deck.
 - **Handwriting** — stroke-order animation plus finger-tracing practice for ~2,000 of the
@@ -50,10 +52,18 @@ Kai 楷, or mono), text size, line spacing, and a reading theme (app / ink / pap
 — and it renders **images**, not just text: illustrated novels' inline pictures, scanned PDFs and
 photographed pages (with the OCR'd text still tappable beneath), and CBZ picture/comic books page by
 page. A **read-aloud** mode speaks the chapter with the current sentence highlighted, auto-scrolling
-and auto-advancing through chapters at an adjustable speed, and it resumes where you left off.
+and auto-advancing through chapters at an adjustable speed, and it resumes where you left off. The
+controls auto-hide as you read, and scrolling past the end of a chapter flows straight into the next.
 
 **Spaced repetition done right.** A from-scratch implementation of **FSRS-6**, the modern
-scheduler that needs ~20–30% fewer reviews than classic SM-2 for the same retention.
+scheduler that needs ~20–30% fewer reviews than classic SM-2 for the same retention. When you're
+caught up you can **review ahead** to drill the next cards early (they reschedule normally), and a
+gentle daily **reminder** nudges you when reviews are ready or you've gone quiet.
+
+**On your home screen.** Two optional widgets (Jetpack Glance): a *character of the moment* that
+rotates and opens the character when tapped, and a *cultivation status* widget showing your rank,
+characters known, and reviews due (or the time until the next). The in-app home also surfaces a
+fresh character each time, tap for another.
 
 **A dictionary that works.** 122,143 CC-CEDICT entries, searchable in Chinese, pinyin, or
 English, with tone-marked readings and on-device audio for any word.
@@ -72,6 +82,7 @@ serif reader and an optional bundled LXGW WenKai (霞鹜文楷) Kai brush-script
 | SRS | Native FSRS-6 |
 | Ebooks | Native EPUB/TXT/MOBI parsers · PDFBox-Android · ML Kit OCR |
 | Audio | On-device Chinese text-to-speech |
+| Widgets / reminders | Jetpack Glance · WorkManager |
 | Min / target SDK | 26 / 35 |
 
 ## Building from source

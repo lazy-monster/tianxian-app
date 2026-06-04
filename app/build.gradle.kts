@@ -55,4 +55,7 @@ dependencies {
 
     implementation(libs.pdfbox.android)          // PDF text extraction
     implementation(libs.mlkit.text.chinese)       // on-device OCR for scanned pages
+
+    implementation(libs.glance.appwidget)         // home-screen widgets (Compose/Glance)
+    implementation(libs.work.runtime.ktx)         // periodic review reminders
 }

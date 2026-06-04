@@ -2,6 +2,7 @@ package com.scholar.app
 
 import android.app.Application
 import com.scholar.app.di.AppGraph
+import com.scholar.app.notify.Reminders
 
 class ScholarApp : Application() {
     lateinit var graph: AppGraph
@@ -10,6 +11,8 @@ class ScholarApp : Application() {
     override fun onCreate() {
         super.onCreate()
         graph = AppGraph(this)
+        Reminders.ensureChannel(this)
+        if (graph.settings.remindersEnabled) Reminders.schedule(this)
     }
 
     companion object {
