@@ -326,7 +326,7 @@ private fun readingLabel(r: Radical): String =
     RadicalNames.forNumber(r.number)?.let { "${it.name} ${it.pinyin}" } ?: r.pinyin
 
 /** Three distinct wrong options for [r], projected through [field] (meaning, glyph, or reading). */
-private inline fun radDistractors(all: List<Radical>, r: Radical, field: (Radical) -> String): List<String> {
+private fun radDistractors(all: List<Radical>, r: Radical, field: (Radical) -> String): List<String> {
     val correct = field(r)
     return all.asSequence().filter { it.number != r.number }.map(field)
         .filter { it.isNotBlank() }.distinct().filter { it != correct }.toList().shuffled().take(3)

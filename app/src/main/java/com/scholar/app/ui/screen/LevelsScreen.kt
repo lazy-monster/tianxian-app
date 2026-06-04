@@ -327,7 +327,7 @@ private fun shortGloss(w: HskWord): String =
     w.meaning.split('/', ';', '；').map { it.trim() }.firstOrNull { it.isNotEmpty() }?.take(40)
         ?: w.meaning.take(40)
 
-private inline fun distractors(pool: List<HskWord>, target: HskWord, field: (HskWord) -> String): List<String> {
+private fun distractors(pool: List<HskWord>, target: HskWord, field: (HskWord) -> String): List<String> {
     val correct = field(target)
     return pool.asSequence().filter { it.word != target.word }.map(field)
         .filter { it.isNotBlank() }.distinct().filter { it != correct }.toList().shuffled().take(3)
