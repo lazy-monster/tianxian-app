@@ -1,6 +1,7 @@
 package com.scholar.app.di
 
 import android.content.Context
+import com.scholar.app.audio.SoundFx
 import com.scholar.app.audio.Speaker
 import com.scholar.app.data.SettingsStore
 import com.scholar.app.data.backup.BackupManager
@@ -45,6 +46,9 @@ class AppGraph(context: Context) {
         }
 
     val speaker by lazy { Speaker(app) }
+
+    /** Short interactive trial cues, gated by the user's sound-effects setting. */
+    val soundFx by lazy { SoundFx { settings.soundEffectsEnabled } }
 
     /** Application-lifetime scope for fire-and-forget writes that must outlive a single screen —
         e.g. sealing a freshly-learned batch into the review deck even if the user navigates away

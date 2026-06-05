@@ -19,6 +19,21 @@ class SettingsStore(context: Context) {
         get() = prefs.getBoolean("dark", true)
         set(v) = prefs.edit().putBoolean("dark", v).apply()
 
+    /** Selected app skin id (see APP_THEMES). Migrates the legacy `dark` boolean on first read. */
+    var themeId: String
+        get() = prefs.getString("theme_id", if (darkTheme) "ink" else "paper") ?: "ink"
+        set(v) = prefs.edit().putString("theme_id", v).apply()
+
+    /** Home-screen widget skin: "follow" (mirror the app), or any APP_THEMES id (e.g. "paper"). */
+    var widgetThemeKey: String
+        get() = prefs.getString("widget_theme", "follow") ?: "follow"
+        set(v) = prefs.edit().putString("widget_theme", v).apply()
+
+    /** Short interactive cues during trials (correct / wrong / breakthrough). */
+    var soundEffectsEnabled: Boolean
+        get() = prefs.getBoolean("sound_effects", true)
+        set(v) = prefs.edit().putBoolean("sound_effects", v).apply()
+
     var onboarded: Boolean
         get() = prefs.getBoolean("onboarded", false)
         set(v) = prefs.edit().putBoolean("onboarded", v).apply()

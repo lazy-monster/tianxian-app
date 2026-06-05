@@ -41,6 +41,9 @@ class BackupManager(
 
         root.put("settings", JSONObject()
             .put("darkTheme", settings.darkTheme)
+            .put("themeId", settings.themeId)
+            .put("widgetThemeKey", settings.widgetThemeKey)
+            .put("soundEffectsEnabled", settings.soundEffectsEnabled)
             .put("desiredRetention", settings.desiredRetention.toDouble())
             .put("hskBatchSize", settings.hskBatchSize)
             .put("readerFontKey", settings.readerFontKey)
@@ -102,6 +105,9 @@ class BackupManager(
 
         root.optJSONObject("settings")?.let { s ->
             if (s.has("darkTheme")) settings.darkTheme = s.getBoolean("darkTheme")
+            if (s.has("themeId")) settings.themeId = s.getString("themeId")
+            if (s.has("widgetThemeKey")) settings.widgetThemeKey = s.getString("widgetThemeKey")
+            if (s.has("soundEffectsEnabled")) settings.soundEffectsEnabled = s.getBoolean("soundEffectsEnabled")
             if (s.has("desiredRetention")) settings.desiredRetention = s.getDouble("desiredRetention").toFloat()
             if (s.has("hskBatchSize")) settings.hskBatchSize = s.getInt("hskBatchSize")
             if (s.has("readerFontKey")) settings.readerFontKey = s.getString("readerFontKey")

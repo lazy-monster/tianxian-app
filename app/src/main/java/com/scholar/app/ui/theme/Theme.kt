@@ -34,6 +34,46 @@ private val LightX = XColors(
     Paper.text, Paper.textSoft, Paper.textFaint,
     Paper.cinnabar, Paper.cinnabarDeep, Paper.gold, Paper.jade, Paper.jadeDeep,
 )
+private val JadeX = XColors(
+    Jade.bg, Jade.bg2, Jade.surface, Jade.surface2, Jade.line,
+    Jade.text, Jade.textSoft, Jade.textFaint,
+    Jade.cinnabar, Jade.cinnabarDeep, Jade.gold, Jade.jade, Jade.jadeDeep,
+)
+private val VermilionX = XColors(
+    Vermilion.bg, Vermilion.bg2, Vermilion.surface, Vermilion.surface2, Vermilion.line,
+    Vermilion.text, Vermilion.textSoft, Vermilion.textFaint,
+    Vermilion.cinnabar, Vermilion.cinnabarDeep, Vermilion.gold, Vermilion.jade, Vermilion.jadeDeep,
+)
+private val AzureX = XColors(
+    Azure.bg, Azure.bg2, Azure.surface, Azure.surface2, Azure.line,
+    Azure.text, Azure.textSoft, Azure.textFaint,
+    Azure.cinnabar, Azure.cinnabarDeep, Azure.gold, Azure.jade, Azure.jadeDeep,
+)
+private val BambooX = XColors(
+    Bamboo.bg, Bamboo.bg2, Bamboo.surface, Bamboo.surface2, Bamboo.line,
+    Bamboo.text, Bamboo.textSoft, Bamboo.textFaint,
+    Bamboo.cinnabar, Bamboo.cinnabarDeep, Bamboo.gold, Bamboo.jade, Bamboo.jadeDeep,
+)
+
+/** A selectable app skin: a palette plus the dark/light flag that drives Material's scheme. */
+@Immutable
+data class AppTheme(
+    val id: String, val label: String, val hanzi: String, val blurb: String,
+    val dark: Boolean, val colors: XColors,
+)
+
+/** All skins the user can pick from, in display order. The first is the default. */
+val APP_THEMES: List<AppTheme> = listOf(
+    AppTheme("ink", "Ink Wash", "墨", "Classic 水墨 dark", true, DarkX),
+    AppTheme("jade", "Jade Heaven", "青", "Jade-green twilight", true, JadeX),
+    AppTheme("vermilion", "Cinnabar Dusk", "丹", "Warm smouldering red", true, VermilionX),
+    AppTheme("azure", "Distant Mountains", "黛", "Ink & indigo blue", true, AzureX),
+    AppTheme("paper", "Rice Paper", "纸", "Bright 宣纸 light", false, LightX),
+    AppTheme("bamboo", "Bamboo Slips", "竹", "Pale green light", false, BambooX),
+)
+
+/** Resolve a stored theme id to its [AppTheme], defaulting to Ink for unknown/legacy ids. */
+fun themeById(id: String?): AppTheme = APP_THEMES.firstOrNull { it.id == id } ?: APP_THEMES[0]
 
 val LocalXColors = staticCompositionLocalOf { DarkX }
 
@@ -78,9 +118,9 @@ private val XTypography = Typography(
 )
 
 @Composable
-fun ScholarTheme(dark: Boolean = true, content: @Composable () -> Unit) {
-    val x = if (dark) DarkX else LightX
-    val scheme = if (dark)
+fun ScholarTheme(theme: AppTheme = APP_THEMES[0], content: @Composable () -> Unit) {
+    val x = theme.colors
+    val scheme = if (theme.dark)
         darkColorScheme(primary = x.cinnabar, background = x.bg, surface = x.surface,
             onBackground = x.text, onSurface = x.text)
     else

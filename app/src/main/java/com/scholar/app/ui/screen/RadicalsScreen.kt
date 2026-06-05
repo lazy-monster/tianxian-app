@@ -1,5 +1,6 @@
 package com.scholar.app.ui.screen
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -46,13 +47,24 @@ fun RadicalsScreen(graph: AppGraph, onBack: () -> Unit, onOpenChar: (String) -> 
 
     LaunchedEffect(Unit) { radicals = withContext(Dispatchers.IO) { graph.dictionary.radicals() } }
 
+    // System back unwinds the in-screen depth one level at a time (Trial → Track → Browse,
+    // Cards → Browse), mirroring the on-screen back chips, instead of popping the whole Learn route.
     when (val m = mode) {
         RadMode.Browse -> RadicalsList(graph, radicals, onBack, onOpenChar,
             onFlashcards = { mode = RadMode.Cards }, onTrack = { mode = RadMode.Track })
-        RadMode.Cards -> RadicalFlashcards(graph, radicals, onExit = { mode = RadMode.Browse })
-        RadMode.Track -> RadicalTrackScreen(graph, radicals,
-            onExit = { mode = RadMode.Browse }, onTrial = { b -> mode = RadMode.Trial(b) })
-        is RadMode.Trial -> RadicalTrial(graph, radicals, m.batch, onExit = { mode = RadMode.Track })
+        RadMode.Cards -> {
+            BackHandler { mode = RadMode.Browse }
+            RadicalFlashcards(graph, radicals, onExit = { mode = RadMode.Browse })
+        }
+        RadMode.Track -> {
+            BackHandler { mode = RadMode.Browse }
+            RadicalTrackScreen(graph, radicals,
+                onExit = { mode = RadMode.Browse }, onTrial = { b -> mode = RadMode.Trial(b) })
+        }
+        is RadMode.Trial -> {
+            BackHandler { mode = RadMode.Track }
+            RadicalTrial(graph, radicals, m.batch, onExit = { mode = RadMode.Track })
+        }
     }
 }
 
@@ -84,6 +96,11 @@ private fun RadicalsList(
         verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item {
             ScreenHeader("Radicals & Components", "The 214 Kangxi radicals are the semantic pieces characters are built from. Knowing them turns memorising into reading meaning. Tap one for example characters.", onBack)
+            // Reassure the learner that the gold line is the radical's everyday teaching nickname,
+            // not its dictionary reading — these "X字旁 / X字头" names are real and standard.
+            Text("The gold line is each radical's everyday name (部首名称) — e.g. 宀 is 宝盖头 (bǎo gài tóu), 氵 is 三点水. It's how the piece is spoken in class, distinct from the character's own reading shown beneath it.",
+                color = x.textFaint, fontSize = 12.sp, lineHeight = 17.sp)
+            Spacer(Modifier.height(8.dp))
             // Two study paths — both learning-only; radicals never enter your review deck.
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Box(Modifier.weight(1f).clip(RoundedCornerShape(14.dp)).background(x.surface2)
@@ -468,7 +485,9 @@ private fun RadicalTrial(graph: AppGraph, radicals: List<Radical>, batchIndex: I
             Box(Modifier.fillMaxWidth().padding(vertical = 5.dp).clip(RoundedCornerShape(14.dp))
                 .background(bg).clickable(enabled = selected == null) {
                     selected = opt
-                    if (opt == q.answer) score++
+                    val right = opt == q.answer
+                    if (right) score++
+                    if (right) graph.soundFx.correct() else graph.soundFx.wrong()   // interactive cue
                     graph.speaker.speak(speakTarget(q.prompt, common))   // hear it the moment you answer
                 }.padding(vertical = 15.dp, horizontal = 16.dp), contentAlignment = Alignment.Center) {
                 Text(opt, fontFamily = SerifSC,
@@ -498,7 +517,7 @@ private fun RadicalTrial(graph: AppGraph, radicals: List<Radical>, batchIndex: I
         if (selected != null) {
             FlashButton(if (qIdx < questions.lastIndex) "Next →" else "Finish", x.gold, Color.White,
                 Modifier.fillMaxWidth()) {
-                if (qIdx < questions.lastIndex) { qIdx++; selected = null }
+                if (qIdx < questions.lastIndex) { graph.soundFx.tap(); qIdx++; selected = null }
                 else {
                     val pct = score * 100 / questions.size
                     finishedPct = pct

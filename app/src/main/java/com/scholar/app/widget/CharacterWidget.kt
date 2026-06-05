@@ -28,8 +28,8 @@ import androidx.glance.text.TextAlign
 import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
 import com.scholar.app.MainActivity
+import com.scholar.app.data.SettingsStore
 import com.scholar.app.data.content.ContentStore
-import com.scholar.app.ui.theme.Ink
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -41,22 +41,23 @@ class CharacterWidget : GlanceAppWidget() {
         val ch = ci?.char ?: "学"
         val pinyin = ci?.pinyin.orEmpty()
         val gloss = ci?.definition.orEmpty().substringBefore(",").substringBefore("/").trim().take(30)
+        val x = resolveWidgetColors(SettingsStore(context))
         provideContent {
             Column(
-                modifier = GlanceModifier.fillMaxSize().background(ColorProvider(Ink.surface)).padding(12.dp)
+                modifier = GlanceModifier.fillMaxSize().background(ColorProvider(x.surface)).padding(12.dp)
                     .clickable(actionStartActivity(openRoute(context, "char/$ch"))),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(ch, style = TextStyle(color = ColorProvider(Ink.text), fontSize = 46.sp, fontWeight = FontWeight.Bold))
+                Text(ch, style = TextStyle(color = ColorProvider(x.text), fontSize = 46.sp, fontWeight = FontWeight.Bold))
                 if (pinyin.isNotBlank())
-                    Text(pinyin, style = TextStyle(color = ColorProvider(Ink.gold), fontSize = 15.sp))
+                    Text(pinyin, style = TextStyle(color = ColorProvider(x.gold), fontSize = 15.sp))
                 if (gloss.isNotBlank())
-                    Text(gloss, maxLines = 2, style = TextStyle(color = ColorProvider(Ink.textSoft),
+                    Text(gloss, maxLines = 2, style = TextStyle(color = ColorProvider(x.textSoft),
                         fontSize = 12.sp, textAlign = TextAlign.Center))
                 Spacer(GlanceModifier.height(6.dp))
                 Text("↻", modifier = GlanceModifier.clickable(actionRunCallback<RerollCharacterAction>()),
-                    style = TextStyle(color = ColorProvider(Ink.textFaint), fontSize = 18.sp))
+                    style = TextStyle(color = ColorProvider(x.textFaint), fontSize = 18.sp))
             }
         }
     }

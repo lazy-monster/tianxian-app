@@ -22,6 +22,7 @@ import com.scholar.app.notify.Reminders
 import com.scholar.app.ui.ScholarRoot
 import com.scholar.app.ui.onboarding.Onboarding
 import com.scholar.app.ui.theme.ScholarTheme
+import com.scholar.app.ui.theme.themeById
 import com.scholar.app.widget.WidgetUpdater
 
 class MainActivity : ComponentActivity() {
@@ -36,9 +37,10 @@ class MainActivity : ComponentActivity() {
         val graph = ScholarApp.graph(application)
         val settings = SettingsStore(this)
         setContent {
-            var dark by remember { mutableStateOf(settings.darkTheme) }
+            var themeId by remember { mutableStateOf(settings.themeId) }
             var onboarded by remember { mutableStateOf(settings.onboarded) }
-            ScholarTheme(dark = dark) {
+            val theme = themeById(themeId)
+            ScholarTheme(theme = theme) {
                 if (!onboarded) {
                     Onboarding(onFinish = { settings.onboarded = true; onboarded = true })
                 } else {
@@ -61,8 +63,14 @@ class MainActivity : ComponentActivity() {
                     }
                     ScholarRoot(
                         graph = graph,
-                        dark = dark,
-                        onToggleTheme = { dark = !dark; settings.darkTheme = dark },
+                        themeId = themeId,
+                        onSetTheme = { id ->
+                            themeId = id
+                            settings.themeId = id
+                            // keep the legacy flag in sync so the widget "follow light/dark" stays right
+                            settings.darkTheme = themeById(id).dark
+                            WidgetUpdater.refresh(applicationContext)
+                        },
                         startRoute = pendingRoute.value,
                     )
                 }

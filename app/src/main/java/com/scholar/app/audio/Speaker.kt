@@ -21,6 +21,7 @@ class Speaker(context: Context) {
 
     // read-aloud sequence state (mutated only on the main thread)
     private var items: List<String> = emptyList()
+    private var current = 0                       // index of the sentence currently being spoken
     private var onIndex: ((Int) -> Unit)? = null
     private var onFinished: (() -> Unit)? = null
     @Volatile private var token = 0
@@ -60,11 +61,12 @@ class Speaker(context: Context) {
     fun setRate(rate: Float) { if (ready) tts.setSpeechRate(rate) }
 
     /**
-     * Read [items] in order. [onIndex] fires (on the main thread) as each sentence begins — use it
-     * to highlight/scroll. [onDone] fires once the last sentence finishes. No-op-safe: an empty list
-     * or an unready engine calls [onDone] immediately.
+     * Read [items] in order starting at [startAt]. [onIndex] fires (on the main thread) as each
+     * sentence begins, carrying its absolute index in [items] — use it to highlight/scroll. [onDone]
+     * fires once the last sentence finishes. No-op-safe: an empty list or an unready engine calls
+     * [onDone] immediately.
      */
-    fun speakSequence(items: List<String>, onIndex: (Int) -> Unit, onDone: () -> Unit) {
+    fun speakSequence(items: List<String>, startAt: Int = 0, onIndex: (Int) -> Unit, onDone: () -> Unit) {
         if (!ready || items.isEmpty()) { onDone(); return }
         token++
         this.items = items
@@ -72,7 +74,20 @@ class Speaker(context: Context) {
         this.onFinished = onDone
         isSpeaking = true
         tts.stop()
-        speakAt(0)
+        speakAt(startAt.coerceIn(0, items.lastIndex))
+    }
+
+    /**
+     * Jump [delta] sentences within the active read-aloud (e.g. -1 to repeat/go back, +1 to skip
+     * ahead) and start speaking from there. Clamped to the current sequence; no-op if not reading.
+     */
+    fun skipBy(delta: Int) {
+        main.post {
+            if (!isSpeaking || items.isEmpty()) return@post
+            // New token so the interrupted utterance's onDone can't auto-advance over our jump.
+            token++
+            speakAt((current + delta).coerceIn(0, items.lastIndex))
+        }
     }
 
     /** Stop read-aloud and clear sequence callbacks (does not fire onDone). */
@@ -84,6 +99,7 @@ class Speaker(context: Context) {
     }
 
     private fun speakAt(i: Int) {
+        current = i
         tts.speak(items[i], TextToSpeech.QUEUE_FLUSH, null, "$token:$i")
     }
 

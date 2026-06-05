@@ -4,41 +4,51 @@ package com.scholar.app.data
  * Maps real learning progress onto the xianxia cultivation ladder, so the genre page
  * becomes a living rank rather than a glossary.
  *
+ * The rank is anchored to **fluency**, not exposure: the score approximates how much of a
+ * fluent reader's vocabulary you have genuinely and durably acquired. Deep retention is the spine.
+ *
  * Cultivation base (修为) blends four signals:
- *   - characters known           (the spine, weight 1.0 — earned through review/marking)
- *   - words mastered via FSRS     (review depth, weight 0.2)
- *   - radicals cultivated         (foundation cleared on the radical track, weight 0.5)
- *   - words sealed on the track   (study credit for passing character trials, weight 0.4)
+ *   - words/chars MASTERED (FSRS stability ≥ 21d)   weight 1.0 — durable recall, the true measure
+ *   - characters merely KNOWN (recognition)          weight 0.3 — partial credit; recognised, not yet fluent
+ *   - radicals cultivated                             weight 0.4 — foundation (caps at 214 ≈ 86 pts)
+ *   - words sealed on the study track                 weight 0.2 — freshly learned; light credit until they
+ *                                                                  survive review and graduate into "mastered"
  *
- * Crucially, **both review and the gated study tracks move the rank**: the tracks grant credit
- * the moment you break through a trial, so a study-only day (no reviews) still advances you;
- * reviews then deepen it as the same characters become "known" and eventually "mastered".
+ * Both review and the gated tracks move the rank, but only durable mastery carries you to the top:
+ * recognition and study-credit are deliberately small, so against a corpus of thousands of words the
+ * high realms can only be reached by mastering the language for real — not by flipping through cards once.
  *
- * The ladder is tuned as a long climb: comfortable native-novel reading lands around the
- * Tribulation realm, and Great Perfection sits well beyond it.
+ * Calibrated to the bundled HSK corpus (~11,470 words / ~3,000 fluency-level characters):
+ *   - entering the final realm (渡劫 Tribulation) ≈ mastering ~HSK 1–6 (≈5–6k units) — comfortable native reading;
+ *   - Great Perfection sits near total mastery of the whole corpus — a near-mythical climb.
+ * Realm thresholds **accelerate** (each gap wider than the last), so from a high realm the distance to
+ * the peak is far greater than a linear "two realms away" suggests — exactly like cultivating at altitude.
  */
 object Cultivation {
 
     data class Realm(val index: Int, val hanzi: String, val name: String, val entryScore: Int, val note: String)
 
+    // Entry scores accelerate (gaps 180,270,400,550,750,1000,1300,1650): each realm costs more 修为
+    // than the last. Anchored to mastered-vocabulary milestones on the bundled HSK corpus.
     val REALMS = listOf(
-        Realm(0, "炼气", "Qi Refining", 0, "Drawing qi into the body. The long first climb — pinyin and your first few hundred characters."),
-        Realm(1, "筑基", "Foundation Establishment", 150, "A true cultivator. The foundation laid here decides how high you can ever climb."),
-        Realm(2, "金丹", "Golden Core", 400, "Qi condenses into a core — you can read simple, graded text without drowning."),
-        Realm(3, "元婴", "Nascent Soul", 750, "A second self forms. Sect elders sit here; you can wade into a real novel with a dictionary."),
-        Realm(4, "化神", "Spirit Severing", 1150, "The soul merges with heaven and earth. Reading begins to flow."),
-        Realm(5, "炼虚", "Void Refinement", 1600, "You grasp the underlying laws — context carries you past unknown words."),
-        Realm(6, "合体", "Body Integration", 2100, "Body and law are one. Most chapters open without a fight."),
-        Realm(7, "大乘", "Great Ascension", 2600, "The peak of the mortal world, preparing to leave it behind."),
-        Realm(8, "渡劫", "Tribulation Crossing", 3000, "Crossing heaven's lightning into immortality — fluent, comfortable native reading."),
+        Realm(0, "炼气", "Qi Refining", 0, "Drawing qi into the body. The long first climb — pinyin, the radicals, and your first hundred-odd words held firmly."),
+        Realm(1, "筑基", "Foundation Establishment", 180, "A true cultivator. The foundation laid here — early HSK, mastered not merely met — decides how high you can ever climb."),
+        Realm(2, "金丹", "Golden Core", 450, "Qi condenses into a core — graded and simple text opens up without drowning you."),
+        Realm(3, "元婴", "Nascent Soul", 850, "A second self forms. Sect elders sit here; you can wade into a real novel with a dictionary at your side."),
+        Realm(4, "化神", "Spirit Severing", 1400, "The soul merges with heaven and earth. With several thousand words held fast, reading begins to flow."),
+        Realm(5, "炼虚", "Void Refinement", 2150, "You grasp the underlying laws — context now carries you past most unknown words unaided."),
+        Realm(6, "合体", "Body Integration", 3150, "Body and law are one. Most chapters open without a fight; the HSK core is yours."),
+        Realm(7, "大乘", "Great Ascension", 4450, "The peak of the mortal world — the advanced lexicon largely mastered, preparing to leave the dictionary behind."),
+        Realm(8, "渡劫", "Tribulation Crossing", 6100, "Crossing heaven's lightning into immortality — fluent, comfortable native reading. The final realm is the longest: its summit, Great Perfection, is near-total mastery of the whole corpus."),
     )
 
-    private const val PEAK_CAP = 4200                      // synthetic ceiling for the top realm's sub-stages
-    private val QI_LAYERS = listOf(0, 8, 18, 30, 45, 62, 82, 105, 128)   // entry score for Qi Refining layers 1..9
+    private const val PEAK_CAP = 12100                     // ceiling for the top realm's sub-stages ≈ total corpus mastery
+    private val QI_LAYERS = listOf(0, 10, 24, 42, 65, 92, 122, 150, 165)   // entry score for Qi Refining layers 1..9
     private val SUBSTAGES = listOf("Early Stage", "Middle Stage", "Late Stage", "Great Perfection")
 
-    fun score(chars: Int, wordsMastered: Int, radicalsCultivated: Int, trackWords: Int): Int =
-        (chars + 0.2 * wordsMastered + 0.5 * radicalsCultivated + 0.4 * trackWords).toInt()
+    /** 修为. Durable mastery is the spine (×1.0); recognition, foundation and fresh study credit add less. */
+    fun score(known: Int, mastered: Int, radicalsCultivated: Int, trackWords: Int): Int =
+        (mastered + 0.3 * known + 0.4 * radicalsCultivated + 0.2 * trackWords).toInt()
 
     data class Rank(
         val realm: Realm,
@@ -53,8 +63,8 @@ object Cultivation {
         val isPeak: Boolean,
     )
 
-    fun rankFor(chars: Int, wordsMastered: Int, radicalsCultivated: Int, trackWords: Int): Rank {
-        val p = score(chars, wordsMastered, radicalsCultivated, trackWords)
+    fun rankFor(known: Int, mastered: Int, radicalsCultivated: Int, trackWords: Int): Rank {
+        val p = score(known, mastered, radicalsCultivated, trackWords)
         val ri = REALMS.indexOfLast { it.entryScore <= p }.coerceAtLeast(0)
         val realm = REALMS[ri]
         val nextRealm = REALMS.getOrNull(ri + 1)

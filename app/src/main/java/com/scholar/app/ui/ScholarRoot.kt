@@ -15,6 +15,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavDestination.Companion.hierarchy
@@ -27,6 +28,7 @@ import com.scholar.app.data.Cultivation
 import com.scholar.app.di.AppGraph
 import com.scholar.app.ui.screen.*
 import com.scholar.app.ui.theme.Theme
+import com.scholar.app.widget.WidgetUpdater
 
 private data class Tab(val route: String, val label: String, val icon: ImageVector)
 
@@ -39,9 +41,10 @@ private val TABS = listOf(
 )
 
 @Composable
-fun ScholarRoot(graph: AppGraph, dark: Boolean, onToggleTheme: () -> Unit, startRoute: String? = null) {
+fun ScholarRoot(graph: AppGraph, themeId: String, onSetTheme: (String) -> Unit, startRoute: String? = null) {
     val nav = rememberNavController()
     val x = Theme.x
+    val context = LocalContext.current
     // Deep-link from a notification or widget tap: jump to the requested route once on launch.
     LaunchedEffect(startRoute) { if (!startRoute.isNullOrBlank()) runCatching { nav.navigate(startRoute) } }
     val current = nav.currentBackStackEntryAsState().value?.destination
@@ -53,26 +56,39 @@ fun ScholarRoot(graph: AppGraph, dark: Boolean, onToggleTheme: () -> Unit, start
 
     // Cultivation breakthrough watcher: recompute the rank from review progress (known/mastered)
     // and the study tracks (studyTick), and surface a celebration when it crosses a boundary.
-    val knownCount by graph.known.knownCountFlow().collectAsStateWithLifecycle(0)
-    val masteredCount by graph.cards.masteredCountFlow().collectAsStateWithLifecycle(0)
-    val studyTick by graph.settings.studyTick.collectAsStateWithLifecycle(0)
+    //
+    // knownCountFlow/masteredCountFlow are cold Room queries that emit asynchronously, so on a fresh
+    // composition (app relaunch, rotation, process restore) they briefly report 0 before the real
+    // counts arrive. We must NOT act on that transient: doing so recorded a depressed baseline and
+    // then re-fired a bogus breakthrough when the true counts landed. Start at -1 ("not loaded yet")
+    // and skip the watcher until every source has emitted a real value.
+    val knownCount by graph.known.knownCountFlow().collectAsStateWithLifecycle(-1)
+    val masteredCount by graph.cards.masteredCountFlow().collectAsStateWithLifecycle(-1)
+    val studyTick by graph.settings.studyTick.collectAsStateWithLifecycle(-1)
     val rank = remember(knownCount, masteredCount, studyTick) {
-        Cultivation.rankFor(knownCount, masteredCount,
+        if (knownCount < 0 || masteredCount < 0 || studyTick < 0) null
+        else Cultivation.rankFor(knownCount, masteredCount,
             graph.settings.radicalsCultivated(), graph.settings.trackWordsCultivated())
     }
     var breakthrough by remember { mutableStateOf<BreakthroughInfo?>(null) }
-    LaunchedEffect(rank.realm.index, rank.title, rank.score) {
+    LaunchedEffect(rank?.realm?.index, rank?.title, rank?.score) {
+        val r = rank ?: return@LaunchedEffect   // counts not loaded yet — don't baseline off a transient 0
         val s = graph.settings
         if (s.lastSeenRealm < 0) {
-            s.recordCultivation(rank.realm.index, rank.title, rank.score)   // first run / upgrade: baseline only
+            s.recordCultivation(r.realm.index, r.title, r.score)   // first run / upgrade: baseline only
         } else {
-            if (rank.score > s.lastSeenScore) {
-                if (rank.realm.index > s.lastSeenRealm) breakthrough = BreakthroughInfo(rank, major = true)
-                else if (rank.title != s.lastSeenStage) breakthrough = BreakthroughInfo(rank, major = false)
+            if (r.score > s.lastSeenScore) {
+                if (r.realm.index > s.lastSeenRealm) breakthrough = BreakthroughInfo(r, major = true)
+                else if (r.title != s.lastSeenStage) breakthrough = BreakthroughInfo(r, major = false)
             }
-            s.recordCultivation(rank.realm.index, rank.title, rank.score)
+            s.recordCultivation(r.realm.index, r.title, r.score)
         }
+        // Push the new rank to the home-screen widgets immediately, so a breakthrough is reflected
+        // there at once rather than waiting for the system's half-hourly update.
+        WidgetUpdater.refresh(context)
     }
+    // A breakthrough celebration also rings the interactive flourish (if cues are on).
+    LaunchedEffect(breakthrough) { if (breakthrough != null) graph.soundFx.breakthrough() }
 
     Box(Modifier.fillMaxSize()) {
     Scaffold(
@@ -129,7 +145,7 @@ fun ScholarRoot(graph: AppGraph, dark: Boolean, onToggleTheme: () -> Unit, start
             composable("read") { LibraryScreen(graph, onOpenBook = { id -> nav.navigate("reader/$id") }) }
             composable("review") { ReviewScreen(graph, onOpenChar = { ch -> nav.navigate("char/$ch") }) }
             composable("dict") { DictionaryScreen(graph, onOpenChar = { ch -> nav.navigate("char/$ch") }) }
-            composable("settings") { SettingsScreen(graph, dark, onToggleTheme, onBack = { nav.popBackStack() }) }
+            composable("settings") { SettingsScreen(graph, themeId, onSetTheme, onBack = { nav.popBackStack() }) }
 
             composable("reader/{id}") { e ->
                 ReaderScreen(graph, bookId = e.arguments?.getString("id").orEmpty(),

@@ -30,19 +30,26 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.shape.CircleShape
 import com.scholar.app.di.AppGraph
+import com.scholar.app.ui.theme.APP_THEMES
 import com.scholar.app.ui.theme.SerifSC
 import com.scholar.app.ui.theme.Theme
+import com.scholar.app.ui.theme.themeById
+import com.scholar.app.widget.WidgetUpdater
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 @Composable
-fun SettingsScreen(graph: AppGraph, dark: Boolean, onToggleTheme: () -> Unit, onBack: () -> Unit) {
+fun SettingsScreen(graph: AppGraph, themeId: String, onSetTheme: (String) -> Unit, onBack: () -> Unit) {
     val x = Theme.x
     val context = LocalContext.current
     val settings = graph.settings
     val scope = rememberCoroutineScope()
 
+    var soundOn by remember { mutableStateOf(settings.soundEffectsEnabled) }
+    var widgetTheme by remember { mutableStateOf(settings.widgetThemeKey) }
     var retention by remember { mutableStateOf(settings.desiredRetention) }
     var hskBatch by remember { mutableStateOf(settings.hskBatchSize) }
     var radicalBatch by remember { mutableStateOf(settings.radicalBatchSize) }
@@ -100,17 +107,82 @@ fun SettingsScreen(graph: AppGraph, dark: Boolean, onToggleTheme: () -> Unit, on
     Column(Modifier.fillMaxSize().background(x.bg).verticalScroll(rememberScrollState()).padding(horizontal = 22.dp)) {
         ScreenHeader("Settings", onBack = onBack)
 
-        // ── Theme ────────────────────────────────────────────────────────
+        // ── Appearance: app skin ─────────────────────────────────────────
+        Text("Appearance", fontFamily = SerifSC, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = x.text)
+        Spacer(Modifier.height(8.dp))
+        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(x.surface).padding(16.dp)) {
+            Text("Theme", color = x.text, fontWeight = FontWeight.Medium, fontSize = 15.sp)
+            val current = themeById(themeId)
+            Text("${current.hanzi} · ${current.label} — ${current.blurb}", color = x.textSoft, fontSize = 13.sp)
+            Spacer(Modifier.height(12.dp))
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                APP_THEMES.forEach { t ->
+                    val sel = t.id == themeId
+                    Column(horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.clickable { onSetTheme(t.id) }) {
+                        // a little swatch that previews the skin's surface + gold/cinnabar/jade accents
+                        Box(
+                            Modifier.size(54.dp).clip(RoundedCornerShape(14.dp))
+                                .background(t.colors.bg).padding(7.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Box(Modifier.fillMaxSize().clip(RoundedCornerShape(9.dp)).background(t.colors.surface2),
+                                contentAlignment = Alignment.Center) {
+                                Text(t.hanzi, fontFamily = SerifSC, color = t.colors.gold, fontSize = 20.sp,
+                                    fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+                        Spacer(Modifier.height(5.dp))
+                        Box(Modifier.size(width = 30.dp, height = 4.dp).clip(CircleShape)
+                            .background(if (sel) x.cinnabar else Color.Transparent))
+                    }
+                }
+            }
+        }
+
+        // ── Interactive sounds ───────────────────────────────────────────
+        Spacer(Modifier.height(12.dp))
         Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(x.surface).padding(16.dp),
             verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text("Dark theme", color = x.text, fontWeight = FontWeight.Medium, fontSize = 15.sp)
-                Text("Ink-wash dark, or rice-paper light", color = x.textSoft, fontSize = 13.sp)
+                Text("Trial sounds", color = x.text, fontWeight = FontWeight.Medium, fontSize = 15.sp)
+                Text("Soft cues for right, wrong and breakthrough — a quiet rhythm that keeps you going.",
+                    color = x.textSoft, fontSize = 13.sp, lineHeight = 18.sp)
             }
-            Switch(checked = dark, onCheckedChange = { onToggleTheme() },
-                colors = SwitchDefaults.colors(checkedThumbColor = x.gold, checkedTrackColor = x.cinnabarDeep,
-                    uncheckedThumbColor = x.textSoft, uncheckedTrackColor = x.surface2))
+            Switch(checked = soundOn, onCheckedChange = { on ->
+                soundOn = on; settings.soundEffectsEnabled = on
+                if (on) graph.soundFx.correct()   // preview the cue when switching it on
+            }, colors = SwitchDefaults.colors(checkedThumbColor = x.gold, checkedTrackColor = x.cinnabarDeep,
+                uncheckedThumbColor = x.textSoft, uncheckedTrackColor = x.surface2))
         }
+
+        // ── Widget appearance ────────────────────────────────────────────
+        Spacer(Modifier.height(12.dp))
+        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(x.surface).padding(16.dp)) {
+            Text("Home-screen widgets", color = x.text, fontWeight = FontWeight.Medium, fontSize = 15.sp)
+            Text("Skin for the cultivation and character widgets. “Match app” follows your theme above; " +
+                "pick a fixed skin (e.g. a light one) if your home screen calls for it.",
+                color = x.textSoft, fontSize = 13.sp, lineHeight = 18.sp)
+            Spacer(Modifier.height(12.dp))
+            val widgetOptions = listOf("follow" to "Match app", "ink" to "墨 Ink", "paper" to "纸 Paper",
+                "jade" to "青 Jade", "vermilion" to "丹 Cinnabar", "azure" to "黛 Azure", "bamboo" to "竹 Bamboo")
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                widgetOptions.forEach { (key, label) ->
+                    val sel = widgetTheme == key
+                    Box(Modifier.clip(RoundedCornerShape(12.dp))
+                        .background(if (sel) x.cinnabar else x.surface2)
+                        .clickable {
+                            widgetTheme = key; settings.widgetThemeKey = key
+                            WidgetUpdater.refresh(context)
+                        }
+                        .padding(horizontal = 14.dp, vertical = 9.dp)) {
+                        Text(label, color = if (sel) Color.White else x.textSoft, fontSize = 13.sp,
+                            fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal)
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(8.dp))
 
         // ── Review difficulty (FSRS desired retention) ───────────────────
         Spacer(Modifier.height(20.dp))

@@ -1,5 +1,6 @@
 package com.scholar.app.ui.screen
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -52,13 +53,21 @@ fun LevelsScreen(graph: AppGraph, onBack: () -> Unit, onOpenChar: (String) -> Un
     var level by remember { mutableStateOf("new-1") }
     var mode by remember { mutableStateOf<LvMode>(LvMode.Browse) }
 
+    // System back unwinds the in-screen depth one level at a time (Session → Track → Browse),
+    // mirroring the on-screen back chips, instead of popping the whole Learn route at once.
     when (val m = mode) {
         LvMode.Browse -> LevelsBrowse(graph, level, onLevel = { level = it }, onBack, onOpenChar,
             onTrack = { mode = LvMode.Track })
-        LvMode.Track -> CharacterTrackScreen(graph, level, onOpenChar,
-            onExit = { mode = LvMode.Browse }, onSession = { g -> mode = LvMode.Session(g) })
-        is LvMode.Session -> CharacterSession(graph, level, m.group, onOpenChar,
-            onExit = { mode = LvMode.Track })
+        LvMode.Track -> {
+            BackHandler { mode = LvMode.Browse }
+            CharacterTrackScreen(graph, level, onOpenChar,
+                onExit = { mode = LvMode.Browse }, onSession = { g -> mode = LvMode.Session(g) })
+        }
+        is LvMode.Session -> {
+            BackHandler { mode = LvMode.Track }
+            CharacterSession(graph, level, m.group, onOpenChar,
+                onExit = { mode = LvMode.Track })
+        }
     }
 }
 
@@ -427,8 +436,12 @@ private fun CharacterTrial(
                             Spacer(Modifier.height(10.dp))
                             Text(q.word.word, fontFamily = SerifSC, fontWeight = FontWeight.SemiBold,
                                 fontSize = if (q.word.word.length <= 2) 64.sp else 44.sp, color = x.text)
-                            Spacer(Modifier.height(8.dp))
-                            Text("🔊", fontSize = 24.sp, modifier = Modifier.clickable { graph.speaker.speak(q.word.word) })
+                            // No replay on the reading question — hearing the word would hand over the
+                            // pinyin answer. (You still hear it the instant you answer, so it still teaches.)
+                            if (q.kind == CKind.HANZI_TO_MEANING) {
+                                Spacer(Modifier.height(8.dp))
+                                Text("🔊", fontSize = 24.sp, modifier = Modifier.clickable { graph.speaker.speak(q.word.word) })
+                            }
                         }
                     CKind.MEANING_TO_HANZI ->
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -464,7 +477,9 @@ private fun CharacterTrial(
                 Box(Modifier.fillMaxWidth().padding(vertical = 5.dp).clip(RoundedCornerShape(14.dp))
                     .background(bg).clickable(enabled = selected == null) {
                         selected = opt
-                        if (opt == q.answer) score++
+                        val right = opt == q.answer
+                        if (right) score++
+                        if (right) graph.soundFx.correct() else graph.soundFx.wrong()   // interactive cue
                         graph.speaker.speak(q.word.word)   // hear the word the moment you answer
                     }.padding(vertical = 15.dp, horizontal = 16.dp), contentAlignment = Alignment.Center) {
                     Text(opt, fontFamily = SerifSC,
@@ -493,7 +508,7 @@ private fun CharacterTrial(
         if (selected != null) {
             SessionButton(if (qIdx < questions.lastIndex) "Next →" else "Finish", x.gold, Color.White,
                 Modifier.fillMaxWidth()) {
-                if (qIdx < questions.lastIndex) { qIdx++; selected = null }
+                if (qIdx < questions.lastIndex) { graph.soundFx.tap(); qIdx++; selected = null }
                 else {
                     val pct = score * 100 / questions.size
                     finishedPct = pct

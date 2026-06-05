@@ -16,6 +16,12 @@ package com.scholar.app.data.content
  * table and standard mainland teaching practice (the GF 0011-2009 部首 naming conventions). Garbled
  * or non-standard Wikipedia entries were corrected; well-established names it omitted were added.
  *
+ * Re-verified against published 部首名称表 references: 宀 "宝盖头" and 子 "子字旁" are the correct,
+ * everyday names (so are 三点水, 提手旁, 草字头 etc.) — these *look* formulaic but are genuinely how
+ * the radicals are taught. Two genuine fixes were made: 厶 is 私字儿 (not 私字旁), and 罒 is the *net*
+ * radical 网字头 — "四字头" is only a 四-look-alike nickname and is avoided here because this app
+ * teaches radicals by meaning.
+ *
  * Keyed by Kangxi radical number. [name] is the spoken Mandarin term (also fed to TTS so the
  * pronunciation you hear matches the label); [pinyin] is its toned romanisation.
  */
@@ -38,7 +44,7 @@ object RadicalNames {
         22 to RadicalName("三框儿", "sān kuàngr"),
         26 to RadicalName("单耳旁", "dān ěr páng"),
         27 to RadicalName("厂字旁", "chǎng zì páng"),
-        28 to RadicalName("私字旁", "sī zì páng"),
+        28 to RadicalName("私字儿", "sī zìr"),         // 厶 — standard name is 私字儿, not 私字旁
         31 to RadicalName("方框儿", "fāng kuàngr"),
         32 to RadicalName("提土旁", "tí tǔ páng"),       // 土 as left component
         39 to RadicalName("子字旁", "zǐ zì páng"),
@@ -69,7 +75,7 @@ object RadicalNames {
         118 to RadicalName("竹字头", "zhú zì tóu"),      // ⺮ form
         119 to RadicalName("米字旁", "mǐ zì páng"),
         120 to RadicalName("绞丝旁", "jiǎo sī páng"),    // 纟 form
-        122 to RadicalName("四字头", "sì zì tóu"),       // 罒 form
+        122 to RadicalName("网字头", "wǎng zì tóu"),     // 罒 — the *net* radical; "四字头" is a look-alike misnomer
         125 to RadicalName("老字头", "lǎo zì tóu"),      // 耂 form
         130 to RadicalName("肉月旁", "ròu yuè páng"),    // 月(肉) form
         140 to RadicalName("草字头", "cǎo zì tóu"),      // 艹 form

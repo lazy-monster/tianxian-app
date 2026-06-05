@@ -37,6 +37,8 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.scholar.app.di.AppGraph
@@ -51,13 +53,18 @@ import com.scholar.app.ui.theme.Theme
 import com.scholar.app.ui.theme.readerFont
 import com.scholar.app.ui.theme.readerPalette
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
-/** Cumulative overscroll (pixels) past a chapter edge before flowing to the adjacent chapter. */
-private const val CHAPTER_ADVANCE_PX = 220f
+/**
+ * How far (pixels) a *single continuous drag* must pull past a chapter edge before flowing to the
+ * adjacent chapter. Deliberately firm so a light tug at the end of a page doesn't flip pages, and
+ * the accumulator resets on every finger-lift so two small pulls never add up to a page turn.
+ */
+private const val CHAPTER_ADVANCE_PX = 300f
 
 private data class Tok(val text: String, val isWord: Boolean, val start: Int, val end: Int)
 private data class Popup(val word: String, val pinyin: String, val gloss: String,
@@ -95,9 +102,11 @@ fun ReaderScreen(graph: AppGraph, bookId: String, onBack: () -> Unit, onOpenChar
     var speaking by remember { mutableStateOf(false) }
     var speakBlock by remember { mutableStateOf(-1) }
     var speakRange by remember { mutableStateOf<IntRange?>(null) }
+    var resumeIdx by remember { mutableStateOf(0) }   // sentence to resume from after a pause
     var pendingAutoplay by remember { mutableStateOf(false) }
     var restoreBlock by remember { mutableStateOf(-1) }   // scroll target from the saved position, once
     var chromeVisible by remember { mutableStateOf(true) }   // floating controls auto-hide while reading
+    var chromeTouch by remember { mutableStateOf(0) }   // bumped on any control tap to restart the fade timer
 
     // load document + known set off the main thread, then restore the saved position
     LaunchedEffect(bookId) {
@@ -114,6 +123,13 @@ fun ReaderScreen(graph: AppGraph, bookId: String, onBack: () -> Unit, onOpenChar
 
     // stop any read-aloud when leaving the reader
     DisposableEffect(Unit) { onDispose { graph.speaker.stop() } }
+
+    // keep the screen awake while reading aloud (hands-free listening), released on stop/leave
+    val view = LocalView.current
+    DisposableEffect(speaking) {
+        view.keepScreenOn = speaking
+        onDispose { view.keepScreenOn = false }
+    }
 
     if (loading) {
         Box(Modifier.fillMaxSize().background(palette.bg), Alignment.Center) { CircularProgressIndicator(color = x.cinnabar) }
@@ -163,6 +179,8 @@ fun ReaderScreen(graph: AppGraph, bookId: String, onBack: () -> Unit, onOpenChar
     val hi = x.gold.copy(alpha = 0.25f)
 
     fun stopPlay() { graph.speaker.stop(); speaking = false; speakBlock = -1; speakRange = null }
+    // Pause: halt speech but keep the highlight + remembered sentence so ▶ resumes where we left off.
+    fun pausePlay() { graph.speaker.stop(); speaking = false }
 
     fun play(from: Int) {
         if (utts.isEmpty()) {
@@ -173,29 +191,40 @@ fun ReaderScreen(graph: AppGraph, bookId: String, onBack: () -> Unit, onOpenChar
         speaking = true
         graph.speaker.setRate(ttsRate)
         graph.speaker.speakSequence(
-            utts.drop(from).map { it.text },
+            utts.map { it.text },
+            startAt = from,
             onIndex = { i ->
-                val u = utts[from + i]
+                resumeIdx = i
+                val u = utts[i]
                 speakBlock = u.block; speakRange = u.range
                 scope.launch { runCatching { lazyState.animateScrollToItem(u.block + 1) } }
             },
             onDone = {
-                speaking = false; speakBlock = -1; speakRange = null
+                // show controls again when playback ends so the play/restart button isn't left faded out
+                speaking = false; speakBlock = -1; speakRange = null; resumeIdx = 0; chromeVisible = true
                 if (chapterIdx < chapters.lastIndex) { chapterIdx++; pendingAutoplay = true }
             },
         )
     }
 
+    // Jump within read-aloud: -1 repeats/steps back a sentence, +1 skips ahead. No-op when idle.
+    fun skip(delta: Int) { if (speaking) graph.speaker.skipBy(delta) }
+
     fun goNext() {
         if (chapterIdx < chapters.lastIndex) {
-            stopPlay(); chapterIdx++; chromeVisible = true
-            scope.launch { graph.books.savePosition(bookId, chapterIdx, 0); lazyState.scrollToItem(0) }
+            stopPlay(); resumeIdx = 0; chapterIdx++; chromeVisible = true
+            // Land at the very top of the new chapter on the next layout pass — requestScrollToItem
+            // applies before the swapped-in content is drawn, so the list never flashes the retained
+            // (bottom) position that would otherwise re-trigger another advance from the same drag.
+            lazyState.requestScrollToItem(0)
+            scope.launch { graph.books.savePosition(bookId, chapterIdx, 0) }
         }
     }
     fun goPrev() {
         if (chapterIdx > 0) {
-            stopPlay(); chapterIdx--; chromeVisible = true
-            scope.launch { graph.books.savePosition(bookId, chapterIdx, 0); lazyState.scrollToItem(0) }
+            stopPlay(); resumeIdx = 0; chapterIdx--; chromeVisible = true
+            lazyState.requestScrollToItem(0)
+            scope.launch { graph.books.savePosition(bookId, chapterIdx, 0) }
         }
     }
 
@@ -204,6 +233,7 @@ fun ReaderScreen(graph: AppGraph, bookId: String, onBack: () -> Unit, onOpenChar
     val nested = remember(lazyState) {
         object : NestedScrollConnection {
             var overscroll = 0f
+            var turnedThisDrag = false   // at most one chapter turn per continuous finger drag
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
                 if (available.y < -2f && !speaking) chromeVisible = false   // keep controls during read-aloud
                 else if (available.y > 2f) chromeVisible = true
@@ -213,18 +243,27 @@ fun ReaderScreen(graph: AppGraph, bookId: String, onBack: () -> Unit, onOpenChar
                 // Only a deliberate finger drag past the edge turns the page — never fling momentum
                 // that merely happens to reach the end. The reader stays in explicit control.
                 if (source != NestedScrollSource.UserInput) { overscroll = 0f; return Offset.Zero }
+                // Already flipped on this drag: ignore the rest of it so one pull can't span several
+                // chapters. Cleared in onPreFling when the finger lifts.
+                if (turnedThisDrag) return Offset.Zero
                 when {
                     available.y < 0f && !lazyState.canScrollForward -> {
                         overscroll += available.y
-                        if (overscroll < -CHAPTER_ADVANCE_PX) { overscroll = 0f; goNext() }
+                        if (overscroll < -CHAPTER_ADVANCE_PX) { overscroll = 0f; turnedThisDrag = true; goNext() }
                     }
                     available.y > 0f && !lazyState.canScrollBackward -> {
                         overscroll += available.y
-                        if (overscroll > CHAPTER_ADVANCE_PX) { overscroll = 0f; goPrev() }
+                        if (overscroll > CHAPTER_ADVANCE_PX) { overscroll = 0f; turnedThisDrag = true; goPrev() }
                     }
                     else -> overscroll = 0f
                 }
                 return Offset.Zero
+            }
+            // Finger lifted (a fling — possibly zero velocity — always fires here): start the next
+            // drag from scratch so banked overscroll never carries over and a fresh pull is required.
+            override suspend fun onPreFling(available: Velocity): Velocity {
+                overscroll = 0f; turnedThisDrag = false
+                return Velocity.Zero
             }
         }
     }
@@ -248,6 +287,13 @@ fun ReaderScreen(graph: AppGraph, bookId: String, onBack: () -> Unit, onOpenChar
         snapshotFlow { lazyState.firstVisibleItemIndex }.distinctUntilChanged().collect { idx ->
             graph.books.savePosition(bookId, chapterIdx, (idx - 1).coerceAtLeast(0))
         }
+    }
+
+    // While reading aloud, let the controls fade after a few idle seconds so they never sit over the
+    // text being read; a tap brings them back (see the reveal overlay below). Each control tap bumps
+    // chromeTouch to restart this timer. When not speaking, controls follow the scroll logic instead.
+    LaunchedEffect(chromeVisible, speaking, chromeTouch) {
+        if (speaking && chromeVisible) { delay(4000); chromeVisible = false }
     }
 
     Box(Modifier.fillMaxSize().background(palette.bg)) {
@@ -308,14 +354,41 @@ fun ReaderScreen(graph: AppGraph, bookId: String, onBack: () -> Unit, onOpenChar
         }
         }   // end CompositionLocalProvider (overscroll disabled)
 
+        // Read-aloud reveal layer: while listening with the controls faded out, a tap anywhere brings
+        // them back. It exists only in that exact state, so it never intercepts word taps or scrolling
+        // otherwise; drags fall through to the list (tap-only detector), so scrolling still works.
+        if (speaking && !chromeVisible) {
+            Box(Modifier.fillMaxSize().pointerInput(Unit) {
+                detectTapGestures { chromeVisible = true }
+            })
+        }
+
         // floating controls: read-aloud + typography — auto-hide while scrolling down so they never
         // sit on top of the chapter-nav row at the bottom of the page
         AnimatedVisibility(visible = chromeVisible, modifier = Modifier.align(Alignment.BottomEnd)) {
             Column(Modifier.padding(18.dp), horizontalAlignment = Alignment.End,
                 verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 RoundBtn("Aa", x.surface2, x.text) { showControls = true }
-                RoundBtn(if (speaking) "❚❚" else "▶", x.cinnabar, Color.White) {
-                    if (speaking) stopPlay() else play(0)
+                // paused = stopped mid-chapter with the highlight still parked on a sentence
+                val paused = !speaking && speakBlock >= 0
+                when {
+                    speaking ->
+                        // ↺ restart · ‹‹ back a sentence · pause · skip a sentence ›› — under the Aa pill
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                            RoundBtn("↺", x.surface2, x.text, size = 44) { chromeTouch++; play(0) }
+                            RoundBtn("⏮", x.surface2, x.text, size = 44) { chromeTouch++; skip(-1) }
+                            RoundBtn("❚❚", x.cinnabar, Color.White) { pausePlay() }
+                            RoundBtn("⏭", x.surface2, x.text, size = 44) { chromeTouch++; skip(1) }
+                        }
+                    paused ->
+                        // ↺ restart the chapter · ▶ resume from where it was paused
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                            RoundBtn("↺", x.surface2, x.text, size = 44) { play(0) }
+                            RoundBtn("▶", x.cinnabar, Color.White) { play(resumeIdx) }
+                        }
+                    else ->
+                        // fresh chapter: ▶ reads from the top
+                        RoundBtn("▶", x.cinnabar, Color.White) { play(0) }
                 }
             }
         }
@@ -424,9 +497,9 @@ private fun sentencesWithRanges(text: String): List<Pair<IntRange, String>> {
 }
 
 @Composable
-private fun RoundBtn(label: String, bg: Color, fg: Color, onClick: () -> Unit) {
-    Box(Modifier.size(52.dp).clip(CircleShape).background(bg).clickable { onClick() }, Alignment.Center) {
-        Text(label, color = fg, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+private fun RoundBtn(label: String, bg: Color, fg: Color, size: Int = 52, onClick: () -> Unit) {
+    Box(Modifier.size(size.dp).clip(CircleShape).background(bg).clickable { onClick() }, Alignment.Center) {
+        Text(label, color = fg, fontSize = (size * 0.35f).sp, fontWeight = FontWeight.Bold)
     }
 }
 
