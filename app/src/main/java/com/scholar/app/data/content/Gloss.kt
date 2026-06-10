@@ -17,18 +17,21 @@ package com.scholar.app.data.content
 object Gloss {
 
     // Cross-reference noise: never shown as the primary meaning; presence alone triggers fallback.
+    // "used in 恶心" / "(used in place names)" point at a compound and carry no standalone meaning,
+    // so they belong here — 上 ("used in 上声") really means "above; up", recovered by fallback.
     private val NOISE_PREFIXES = listOf(
         "surname ", "variant of ", "old variant of ", "archaic variant of ", "erhua variant",
         "euphemistic variant", "see ", "also written", "abbr. for ", "cl:", "taiwan pr", "also pr",
+        "used in ", "used as ",
     )
 
     // Grammatical / usage descriptions: valid meaning for a function word, but demoted below
     // any concrete sense. (Trailing spaces keep one-word glosses like "particle" out.)
     private val GRAMMAR_PREFIXES = listOf(
         "classifier for", "measure word", "particle ", "conjunction ", "auxiliary ", "modal particle",
-        "structural particle", "aspect particle", "sentence-final", "interjection ", "used in ",
-        "used as ", "radical ", "kangxi radical", "(old)", "(archaic)", "(literary)", "(bound form)",
-        "(dialect)", "(onom.)", "(interj", "(particle", "(grammatical", "(used ", "(prefix", "(suffix",
+        "structural particle", "aspect particle", "sentence-final", "interjection ",
+        "radical ", "kangxi radical", "(old)", "(archaic)", "(literary)", "(bound form)",
+        "(dialect)", "(onom.)", "(interj", "(particle", "(grammatical", "(prefix", "(suffix",
     )
 
     // NB: do NOT split on '|' — it joins trad|simp inside a single cross-reference (變|变[bian4]).
@@ -51,16 +54,25 @@ object Gloss {
         original when the sense is nothing but an annotation ("(adverb of degree)"). */
     private fun stripAnnotation(sense: String): String = unannotated(sense).ifEmpty { sense }
 
+    /** Text used to classify a sense by prefix: what sits outside a leading "(Tw)"/"(old)", or —
+        for a sense that is *only* a parenthetical — the text inside it, so "(used in place names)"
+        is recognised as noise just like the bare "used in 上声". */
+    private fun classifyText(sense: String): String {
+        val u = unannotated(sense)
+        if (u.isNotEmpty()) return u
+        val s = sense.trim()
+        return if (s.startsWith("(") && s.endsWith(")")) s.substring(1, s.length - 1).trim() else s
+    }
+
     private fun isNoise(sense: String): Boolean {
-        val l = unannotated(sense).lowercase()            // look beneath a leading "(Tw)" / "(old)"
+        val l = classifyText(sense).lowercase()
         return NOISE_PREFIXES.any { l.startsWith(it) }
     }
 
     private fun isGrammar(sense: String): Boolean {
         if (isNoise(sense)) return false
-        val core = unannotated(sense)
-        if (core.isEmpty()) return true                   // pure parenthetical, e.g. "(adverb of degree)"
-        return GRAMMAR_PREFIXES.any { core.lowercase().startsWith(it) }
+        if (unannotated(sense).isEmpty()) return true     // pure parenthetical, e.g. "(adverb of degree)"
+        return GRAMMAR_PREFIXES.any { classifyText(sense).lowercase().startsWith(it) }
     }
 
     /** Senses reordered: concrete meanings first, grammatical roles next, cross-ref noise last. */

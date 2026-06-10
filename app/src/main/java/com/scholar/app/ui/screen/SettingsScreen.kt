@@ -15,6 +15,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
@@ -33,6 +34,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.shape.CircleShape
 import com.scholar.app.di.AppGraph
+import com.scholar.app.update.Update
 import com.scholar.app.ui.theme.APP_THEMES
 import com.scholar.app.ui.theme.SerifSC
 import com.scholar.app.ui.theme.Theme
@@ -366,6 +368,9 @@ fun SettingsScreen(graph: AppGraph, themeId: String, onSetTheme: (String) -> Uni
             SettingButton("Reset progress…", x.surface2) { showReset = true }
         }
 
+        // ── Updates ──────────────────────────────────────────────────────
+        UpdatesSection(graph)
+
         // ── About ────────────────────────────────────────────────────────
         Spacer(Modifier.height(20.dp))
         Text("About", fontFamily = SerifSC, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = x.text)
@@ -413,6 +418,83 @@ fun SettingsScreen(graph: AppGraph, themeId: String, onSetTheme: (String) -> Uni
                 TextButton(onClick = { showReset = false }) { Text("Cancel", color = x.textSoft) }
             },
         )
+    }
+}
+
+/** Check GitHub for a newer release and install it in place — the app is sideloaded, so there's
+    no store to do this. Networking happens only when the user taps "Check for updates". */
+@Composable
+private fun UpdatesSection(graph: AppGraph) {
+    val x = Theme.x
+    val scope = rememberCoroutineScope()
+    val installed = remember { graph.updater.current() }
+
+    var checking by remember { mutableStateOf(false) }
+    var update by remember { mutableStateOf<Update?>(null) }
+    var progress by remember { mutableStateOf<Int?>(null) }   // non-null while downloading
+    var msg by remember { mutableStateOf<String?>(null) }
+
+    fun startDownload(u: Update) {
+        if (!graph.updater.canInstall()) {
+            graph.updater.requestInstallPermission()
+            msg = "Allow Scholar to install apps, then tap Update again."
+            return
+        }
+        progress = 0; msg = null
+        scope.launch {
+            runCatching { graph.updater.install(graph.updater.download(u) { progress = it }) }
+                .onSuccess { msg = "Opening the installer…" }
+                .onFailure { msg = "Download failed: ${it.message}" }
+            progress = null
+        }
+    }
+
+    Spacer(Modifier.height(20.dp))
+    Text("Updates", fontFamily = SerifSC, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = x.text)
+    Spacer(Modifier.height(8.dp))
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(x.surface).padding(16.dp)) {
+        Text("Installed version ${installed.first}", color = x.textSoft, fontSize = 14.sp)
+
+        val u = update
+        if (u != null) {
+            Spacer(Modifier.height(10.dp))
+            Text("Version ${u.versionName} is available", color = x.gold,
+                fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+            if (u.notes.isNotBlank()) {
+                Spacer(Modifier.height(4.dp))
+                Text(u.notes, color = x.textSoft, fontSize = 13.sp, lineHeight = 19.sp, maxLines = 8)
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+        val downloading = progress != null
+        if (downloading) {
+            LinearProgressIndicator(progress = { (progress ?: 0) / 100f },
+                modifier = Modifier.fillMaxWidth(), color = x.jade, trackColor = x.surface2)
+            Spacer(Modifier.height(6.dp))
+            Text("Downloading ${progress ?: 0}%…", color = x.textSoft, fontSize = 12.sp)
+        } else if (u != null) {
+            SettingButton("Update to ${u.versionName}", x.jade) { startDownload(u) }
+        } else {
+            SettingButton(if (checking) "Checking…" else "Check for updates", x.surface2) {
+                if (checking) return@SettingButton
+                checking = true; msg = null
+                scope.launch {
+                    runCatching { graph.updater.check() }
+                        .onSuccess { found ->
+                            update = found
+                            if (found == null) msg = "You're on the latest version (${installed.first})."
+                        }
+                        .onFailure { msg = "Couldn't check for updates: ${it.message}" }
+                    checking = false
+                }
+            }
+        }
+
+        msg?.let {
+            Spacer(Modifier.height(10.dp))
+            Text(it, color = x.textSoft, fontSize = 13.sp, lineHeight = 18.sp)
+        }
     }
 }
 

@@ -68,6 +68,17 @@ class GlossTest {
         assertFalse(Gloss.hasRealSense("abbr. for 克罗地亚, Croatia"))
     }
 
+    @Test fun usedInCrossReferenceIsNoise() {
+        // 上 "used in 上声", 家 "used in 家伙 and 家俱" — a compound reference, not a meaning.
+        assertFalse(Gloss.hasRealSense("used in 上声"))
+        assertFalse(Gloss.hasRealSense("used in 家伙 and 家俱"))
+        // even when the whole sense is a parenthetical: 涌 "(used in place names)".
+        assertFalse(Gloss.hasRealSense("(used in place names)"))
+        // but a real meaning alongside the reference survives (上's merged dictionary gloss).
+        assertTrue(Gloss.hasRealSense("used in 上聲|上声 / above; up; to climb"))
+        assertEquals("above", Gloss.primary("used in 上聲|上声 / above; up; to climb"))
+    }
+
     @Test fun realMeaningHasRealSense() {
         assertTrue(Gloss.hasRealSense("all, each, entirely; capital"))
         assertTrue(Gloss.hasRealSense("surname Du / all; entirely / capital"))  // mixed → real

@@ -13,6 +13,7 @@ import com.scholar.app.data.repo.KnownRepository
 import com.scholar.app.data.segment.MaxMatchSegmenter
 import com.scholar.app.data.user.UserDatabase
 import com.scholar.app.reader.ingest.Ingestor
+import com.scholar.app.update.Updater
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -46,6 +47,9 @@ class AppGraph(context: Context) {
         }
 
     val speaker by lazy { Speaker(app) }
+
+    /** Checks GitHub Releases and installs the APK — in-app self-update for the sideloaded build. */
+    val updater by lazy { Updater(app) }
 
     /** Short interactive trial cues, gated by the user's sound-effects setting. */
     val soundFx by lazy { SoundFx { settings.soundEffectsEnabled } }

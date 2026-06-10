@@ -24,12 +24,13 @@ DB = os.path.join(os.path.dirname(__file__), "..", "app", "src", "main", "assets
 NOISE_PREFIXES = (
     "surname ", "variant of ", "old variant of ", "archaic variant of ", "erhua variant",
     "euphemistic variant", "see ", "also written", "abbr. for ", "cl:", "taiwan pr", "also pr",
+    "used in ", "used as ",          # cross-references to a compound, no standalone meaning
 )
 GRAMMAR_PREFIXES = (
     "classifier for", "measure word", "particle ", "conjunction ", "auxiliary ", "modal particle",
-    "structural particle", "aspect particle", "sentence-final", "interjection ", "used in ",
-    "used as ", "radical ", "kangxi radical", "(old)", "(archaic)", "(literary)", "(bound form)",
-    "(dialect)", "(onom.)", "(interj", "(particle", "(grammatical", "(used ", "(prefix", "(suffix",
+    "structural particle", "aspect particle", "sentence-final", "interjection ",
+    "radical ", "kangxi radical", "(old)", "(archaic)", "(literary)", "(bound form)",
+    "(dialect)", "(onom.)", "(interj", "(particle", "(grammatical", "(prefix", "(suffix",
 )
 
 def senses(raw):                       # NB: do NOT split on '|' — it is part of trad|simp refs
@@ -52,16 +53,22 @@ def _unannotated(sense):                 # strip leading "(...)" groups; MAY ret
 def strip_annotation(sense):             # for DISPLAY: keep original if stripping empties it
     return _unannotated(sense) or sense
 
-def is_noise(sense):                     # check beneath any leading "(Tw)" / "(old)" annotation
-    return _unannotated(sense).lower().startswith(NOISE_PREFIXES)
+def _classify_text(sense):               # text used to classify a sense by prefix
+    u = _unannotated(sense)              # text outside any leading "(…)" annotation
+    if u:
+        return u
+    s = sense.strip()                    # pure parenthetical → look inside, e.g. "(used in …)"
+    return s[1:-1].strip() if s.startswith("(") and s.endswith(")") else s
+
+def is_noise(sense):                     # cross-reference with no standalone meaning
+    return _classify_text(sense).lower().startswith(NOISE_PREFIXES)
 
 def is_grammar(sense):
     if is_noise(sense):
         return False
-    core = _unannotated(sense)
-    if core == "":                       # pure parenthetical, e.g. "(adverb of degree)"
+    if _unannotated(sense) == "":        # pure parenthetical that isn't noise, e.g. "(adverb of degree)"
         return True
-    return core.lower().startswith(GRAMMAR_PREFIXES)
+    return _classify_text(sense).lower().startswith(GRAMMAR_PREFIXES)
 
 def ordered(raw):                                  # concrete, then grammar, then noise
     s = senses(raw)
@@ -133,46 +140,53 @@ def resolved_meaning(cur, word, raw):
 
 def main():
     con = sqlite3.connect(DB); cur = con.cursor()
-    failures = []
+    failures, data_gaps = [], []
+
+    # A leak is a BUG only if a real meaning was available but noise was shown anyway. If no source
+    # has a real sense (e.g. CEDICT only knows 大厦 as "(used in the names of grand buildings …)"),
+    # showing that honest annotation is the best we can do — a data gap, not a regression.
+    def check(surface, key, raw, final, shown):
+        if leaks(shown):
+            (failures if has_real_sense(final) else data_gaps).append((surface, key, repr(raw), repr(shown)))
 
     cur.execute("SELECT word, meaning FROM hsk_word")
     hsk = cur.fetchall()
     for word, meaning in hsk:
         m = resolved_meaning(cur, word, meaning or "")
-        for surface, val in (("trial label", short_gloss(m)), ("card back", core(m))):
-            if leaks(val):
-                failures.append((f"hsk {surface}", word, repr(meaning), repr(val)))
+        check("hsk label", word, meaning, m, short_gloss(m))
+        check("hsk card", word, meaning, m, core(m))
 
     cur.execute("SELECT word, gloss FROM genre_term")
     for word, gloss in cur.fetchall():
-        if leaks(primary(gloss or "")):
-            failures.append(("genre", word, repr(gloss), repr(primary(gloss or ""))))
+        check("genre", word, gloss, gloss or "", primary(gloss or ""))
 
     cur.execute("SELECT char, definition FROM character WHERE definition IS NOT NULL AND definition<>''")
     chars = cur.fetchall()
     for ch, defn in chars:
-        if leaks(primary(defn or "")):
-            failures.append(("character", ch, repr(defn), repr(primary(defn or ""))))
+        check("character", ch, defn, defn or "", primary(defn or ""))
 
     print("Spot-checks (after fallback):")
-    for w in ("都", "还", "王", "联系", "这里", "老板", "档", "火暴", "无可厚非", "份", "克"):
+    for w in ("都", "还", "王", "上", "家", "个", "万", "恶", "联系", "涌", "档", "火暴"):
         cur.execute("SELECT meaning FROM hsk_word WHERE word=?", (w,))
         r = cur.fetchone()
         m = resolved_meaning(cur, w, (r[0] if r else "") or "")
         print(f"  {w}: label={short_gloss(m)!r}  card={core(m)!r}")
     print(f"  很: label={short_gloss('(adverb of degree); quite; very; awfully')!r}")
-    print(f"  呢(particle): label={short_gloss('particle indicating continuation of a state')!r}")
     print(f"  棵(classifier): label={short_gloss('classifier for trees, cabbages, plants etc')!r}")
 
     print(f"\nScanned {len(hsk)} hsk_word + genre_term + {len(chars)} character rows.")
+    if data_gaps:
+        print(f"\nData gaps ({len(data_gaps)}) — no learnable meaning in any source, honest annotation shown:")
+        for kind, key, raw, val in data_gaps[:25]:
+            print(f"  [{kind}] {key}: {raw} -> {val}")
+        if len(data_gaps) > 25:
+            print(f"  … and {len(data_gaps) - 25} more")
     if failures:
-        print(f"\nFAIL: {len(failures)} noise-leaking rows:")
+        print(f"\nFAIL: {len(failures)} rows show noise despite a real meaning being available:")
         for kind, key, raw, val in failures[:80]:
             print(f"  [{kind}] {key}: {raw} -> {val}")
-        if len(failures) > 80:
-            print(f"  … and {len(failures) - 80} more")
         sys.exit(1)
-    print("\nPASS: every learner-facing gloss leads with a real meaning (or a valid grammatical role).")
+    print("\nPASS: wherever a real meaning exists, it is shown (no surname/variant/used-in leaks).")
 
 if __name__ == "__main__":
     main()

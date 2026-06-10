@@ -30,7 +30,8 @@ offline app — and your progress is measured in characters you can actually rea
 1. Download `scholar-<version>.apk` from the [latest release](https://github.com/lazy-monster/scholar-app/releases/latest).
 2. Open it on your phone (Android 8.0+). Allow "install from unknown sources" when asked — that's
    normal for apps outside the Play Store.
-3. Done.
+3. Done. After that, **Settings → Updates** checks for new releases and installs them in place —
+   no need to come back here.
 
 > Your progress lives only on your device. Back it up to a single file any time from
 > **Settings → Backup** — restoring it on a new phone picks up exactly where you left off.
