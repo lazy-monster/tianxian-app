@@ -137,8 +137,9 @@ interface KnownDao {
     @Query("SELECT COUNT(*) FROM known_chars WHERE strength>=:threshold")
     suspend fun knownCount(threshold: Double = 0.6): Int
 
-    @Query("SELECT * FROM known_chars WHERE char=:char")
-    suspend fun get(char: String): KnownCharEntity?
+    // the parameter must not be named `char`: Room emits *Java*, where char is a keyword
+    @Query("SELECT * FROM known_chars WHERE char=:ch")
+    suspend fun get(ch: String): KnownCharEntity?
 
     @Upsert suspend fun upsert(known: KnownCharEntity)
 
