@@ -83,6 +83,12 @@ interface CardDao {
     @Query("SELECT * FROM cards WHERE frontRef=:front AND type=:type LIMIT 1")
     suspend fun find(front: String, type: String): CardEntity?
 
+    @Query("SELECT * FROM cards WHERE id=:id")
+    suspend fun get(id: Long): CardEntity?
+
+    @Query("SELECT * FROM cards WHERE id IN (:ids)")
+    suspend fun byIds(ids: List<Long>): List<CardEntity>
+
     @Query("SELECT frontRef FROM cards WHERE frontRef IN (:fronts)")
     suspend fun existingFronts(fronts: List<String>): List<String>
 
@@ -110,6 +116,10 @@ interface ReviewLogDao {
     @Query("SELECT COUNT(*) FROM review_log WHERE reviewedAtMillis>=:since") suspend fun countSince(since: Long): Int
     @Query("SELECT MAX(reviewedAtMillis) FROM review_log") suspend fun lastReviewMillis(): Long?
 
+    /** When this card was last reviewed — the elapsed-time anchor FSRS needs. */
+    @Query("SELECT MAX(reviewedAtMillis) FROM review_log WHERE cardId=:cardId")
+    suspend fun lastReviewFor(cardId: Long): Long?
+
     // backup / restore
     @Query("SELECT * FROM review_log") suspend fun all(): List<ReviewLogEntity>
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertAll(logs: List<ReviewLogEntity>)
@@ -127,6 +137,9 @@ interface KnownDao {
     @Query("SELECT COUNT(*) FROM known_chars WHERE strength>=:threshold")
     suspend fun knownCount(threshold: Double = 0.6): Int
 
+    @Query("SELECT * FROM known_chars WHERE char=:char")
+    suspend fun get(char: String): KnownCharEntity?
+
     @Upsert suspend fun upsert(known: KnownCharEntity)
 
     // backup / restore
@@ -139,6 +152,10 @@ interface KnownDao {
 interface BookDao {
     @Query("SELECT * FROM books ORDER BY addedAtMillis DESC") fun allFlow(): Flow<List<BookEntity>>
     @Query("SELECT * FROM books WHERE id=:id") suspend fun get(id: String): BookEntity?
+    @Query("UPDATE books SET posChapter=:chapter, posBlock=:block WHERE id=:id")
+    suspend fun updatePosition(id: String, chapter: Int, block: Int)
+    @Query("UPDATE books SET coverage=:coverage WHERE id=:id")
+    suspend fun updateCoverage(id: String, coverage: Float)
     @Upsert suspend fun upsert(book: BookEntity)
     @Delete suspend fun delete(book: BookEntity)
 

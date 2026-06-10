@@ -23,6 +23,7 @@ import com.scholar.app.srs.CardType
 import com.scholar.app.ui.theme.Brush
 import com.scholar.app.ui.theme.SerifSC
 import com.scholar.app.ui.theme.Theme
+import com.scholar.app.ui.theme.heroWash
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -52,13 +53,18 @@ fun CultivationScreen(graph: AppGraph, onBack: () -> Unit, onOpenChar: (String) 
     val rank = Cultivation.rankFor(known, mastered, radicalsCult, trackWords)
 
     var lexicon by remember { mutableStateOf<Map<String, List<Term>>>(emptyMap()) }
+    var minedSet by remember { mutableStateOf<Set<String>>(emptySet()) }
     LaunchedEffect(Unit) {
-        lexicon = withContext(Dispatchers.IO) {
+        val loaded = withContext(Dispatchers.IO) {
             graph.dictionary.genreTerms().filter { it.category != "realm" }
                 .map { Term(it, graph.dictionary.lookup(it.word)?.freqRank) }
                 .groupBy { it.t.category }
                 .mapValues { (_, v) -> v.sortedBy { it.freq ?: Int.MAX_VALUE } }
         }
+        minedSet = withContext(Dispatchers.IO) {
+            graph.cards.minedAmong(loaded.values.flatten().map { it.t.word })
+        }
+        lexicon = loaded
     }
 
     LazyColumn(Modifier.fillMaxSize().background(x.bg).padding(horizontal = 22.dp),
@@ -68,7 +74,7 @@ fun CultivationScreen(graph: AppGraph, onBack: () -> Unit, onOpenChar: (String) 
 
         // ── HERO: current rank ───────────────────────────────────────────
         item {
-            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(x.surface2).padding(22.dp)) {
+            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(x.heroWash()).padding(22.dp)) {
                 Text("YOUR CULTIVATION", color = x.textSoft, fontSize = 11.sp, letterSpacing = 2.sp)
                 Spacer(Modifier.height(8.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -105,15 +111,15 @@ fun CultivationScreen(graph: AppGraph, onBack: () -> Unit, onOpenChar: (String) 
         item {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Contribution("Characters\nknown", known, "+$known", x.gold, Modifier.weight(1f))
-                    Contribution("Words\nmastered", mastered, "+${(mastered * 0.2).toInt()}", x.jade, Modifier.weight(1f))
+                    Contribution("Words\nmastered", mastered, "+$mastered", x.jade, Modifier.weight(1f))
+                    Contribution("Characters\nknown", known, "+${(known * Cultivation.W_KNOWN).toInt()}", x.gold, Modifier.weight(1f))
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Contribution("Radicals\ncultivated", radicalsCult, "+${(radicalsCult * 0.5).toInt()}", x.cinnabar, Modifier.weight(1f))
-                    Contribution("Track words\nsealed", trackWords, "+${(trackWords * 0.4).toInt()}", x.jadeDeep, Modifier.weight(1f))
+                    Contribution("Radicals\ncultivated", radicalsCult, "+${(radicalsCult * Cultivation.W_RADICALS).toInt()}", x.cinnabar, Modifier.weight(1f))
+                    Contribution("Track words\nsealed", trackWords, "+${(trackWords * Cultivation.W_TRACK).toInt()}", x.jadeDeep, Modifier.weight(1f))
                 }
             }
-            Text("Your cultivation base blends study and review: characters known are the spine and mastered words add depth, while the gated trials — radicals and character groups — grant 修为 the moment you break through. So a day spent studying counts even before you review.",
+            Text("Your cultivation base blends study and review: durably mastered words are the spine, while characters you recognise and the gated trials — radicals and character groups — add lighter credit the moment you break through. So a day spent studying counts even before you review.",
                 color = x.textFaint, fontSize = 12.sp, lineHeight = 17.sp, modifier = Modifier.padding(top = 8.dp))
         }
 
@@ -150,8 +156,15 @@ fun CultivationScreen(graph: AppGraph, onBack: () -> Unit, onOpenChar: (String) 
                     Spacer(Modifier.height(4.dp))
                 }
                 items(list) { tw ->
-                    TermRow(tw.t, onOpenChar = onOpenChar, onHear = { graph.speaker.speak(tw.t.word) },
-                        onMine = { scope.launch { graph.cards.mine(tw.t.word, "${tw.t.pinyin} · ${tw.t.gloss}", CardType.WORD_RECOGNITION, "Genre: $key") } })
+                    TermRow(tw.t, isMined = tw.t.word in minedSet, onOpenChar = onOpenChar,
+                        onHear = { graph.appScope.launch {
+                            graph.speaker.speak(graph.dictionary.audioTextFor(tw.t.word, tw.t.pinyin)) } },
+                        onMine = {
+                            scope.launch {
+                                graph.cards.mine(tw.t.word, "${tw.t.pinyin} · ${tw.t.gloss}", CardType.WORD_RECOGNITION, "Genre: $key")
+                                minedSet = minedSet + tw.t.word
+                            }
+                        })
                 }
             }
         }
@@ -204,7 +217,8 @@ private fun RealmRow(hanzi: String, name: String, note: String, entry: Int, atta
 }
 
 @Composable
-private fun TermRow(t: GenreTerm, onOpenChar: (String) -> Unit, onHear: () -> Unit, onMine: () -> Unit) {
+private fun TermRow(t: GenreTerm, isMined: Boolean, onOpenChar: (String) -> Unit,
+                    onHear: () -> Unit, onMine: () -> Unit) {
     val x = Theme.x
     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(x.surface).padding(12.dp),
         verticalAlignment = Alignment.CenterVertically) {
@@ -216,6 +230,8 @@ private fun TermRow(t: GenreTerm, onOpenChar: (String) -> Unit, onHear: () -> Un
             Text(t.pinyin, color = x.gold, fontSize = 14.sp)
             Text(t.gloss, color = x.textSoft, fontSize = 13.sp, lineHeight = 18.sp)
         }
-        Text("+", color = x.jade, fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { onMine() })
+        Text(if (isMined) "✓" else "+", color = if (isMined) x.textFaint else x.jade,
+            fontSize = if (isMined) 16.sp else 22.sp, fontWeight = FontWeight.Bold,
+            modifier = Modifier.clickable(enabled = !isMined) { onMine() }.padding(4.dp))
     }
 }

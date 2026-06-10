@@ -15,6 +15,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -23,14 +24,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.scholar.app.data.SettingsStore
+import com.scholar.app.data.content.Gloss
 import com.scholar.app.data.content.HskWord
 import com.scholar.app.di.AppGraph
 import com.scholar.app.srs.CardType
 import com.scholar.app.ui.theme.SerifSC
 import com.scholar.app.ui.theme.Theme
+import com.scholar.app.ui.theme.promptWash
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.random.Random
 
 private val LEVELS = listOf(
     "new-1" to "HSK 1", "new-2" to "HSK 2", "new-3" to "HSK 3", "new-4" to "HSK 4",
@@ -49,24 +53,31 @@ private sealed interface LvMode {
 
 @Composable
 fun LevelsScreen(graph: AppGraph, onBack: () -> Unit, onOpenChar: (String) -> Unit) {
-    // level + mode hoisted so the chosen level survives entering/leaving the guided track
-    var level by remember { mutableStateOf("new-1") }
-    var mode by remember { mutableStateOf<LvMode>(LvMode.Browse) }
+    // level + mode hoisted so the chosen level survives entering/leaving the guided track.
+    // Saveable, because tapping "study character" mid-session swaps this whole route out of
+    // composition — plain remember would dump the user back to Browse and lose the session.
+    var level by rememberSaveable { mutableStateOf("new-1") }
+    var modeCode by rememberSaveable { mutableStateOf(-1) }   // -1 Browse · -2 Track · ≥0 Session(group)
+    val mode: LvMode = when {
+        modeCode == -2 -> LvMode.Track
+        modeCode >= 0 -> LvMode.Session(modeCode)
+        else -> LvMode.Browse
+    }
 
     // System back unwinds the in-screen depth one level at a time (Session → Track → Browse),
     // mirroring the on-screen back chips, instead of popping the whole Learn route at once.
     when (val m = mode) {
         LvMode.Browse -> LevelsBrowse(graph, level, onLevel = { level = it }, onBack, onOpenChar,
-            onTrack = { mode = LvMode.Track })
+            onTrack = { modeCode = -2 })
         LvMode.Track -> {
-            BackHandler { mode = LvMode.Browse }
+            BackHandler { modeCode = -1 }
             CharacterTrackScreen(graph, level, onOpenChar,
-                onExit = { mode = LvMode.Browse }, onSession = { g -> mode = LvMode.Session(g) })
+                onExit = { modeCode = -1 }, onSession = { g -> modeCode = g })
         }
         is LvMode.Session -> {
-            BackHandler { mode = LvMode.Track }
+            BackHandler { modeCode = -2 }
             CharacterSession(graph, level, m.group, onOpenChar,
-                onExit = { mode = LvMode.Track })
+                onExit = { modeCode = -2 })
         }
     }
 }
@@ -167,7 +178,7 @@ private fun LevelsBrowse(
                 verticalAlignment = Alignment.CenterVertically) {
                 HanziLinks(w.word, onOpenChar, fontSize = 26.sp, color = x.text)
                 Spacer(Modifier.width(10.dp))
-                Text("🔊", fontSize = 16.sp, modifier = Modifier.clickable { graph.speaker.speak(w.word) })
+                Text("🔊", fontSize = 16.sp, modifier = Modifier.clickable { speakWord(graph, w.word, w.pinyin) })
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text(w.pinyin, color = x.gold, fontSize = 14.sp)
@@ -286,7 +297,7 @@ private fun CharacterSession(
         return
     }
 
-    var phase by remember(groupIdx) { mutableStateOf(SessPhase.LEARN) }
+    var phase by rememberSaveable(groupIdx) { mutableStateOf(SessPhase.LEARN) }
     when (phase) {
         SessPhase.LEARN -> CharacterLearn(graph, group, groupIdx, onOpenChar, onExit, onBegin = { phase = SessPhase.TRIAL })
         SessPhase.TRIAL -> CharacterTrial(graph, level, groupIdx, group, words, onOpenChar, onExit)
@@ -310,7 +321,7 @@ private fun CharacterLearn(
                 verticalAlignment = Alignment.CenterVertically) {
                 HanziLinks(w.word, onOpenChar, fontSize = 26.sp, color = x.text)
                 Spacer(Modifier.width(10.dp))
-                Text("🔊", fontSize = 16.sp, modifier = Modifier.clickable { graph.speaker.speak(w.word) })
+                Text("🔊", fontSize = 16.sp, modifier = Modifier.clickable { speakWord(graph, w.word, w.pinyin) })
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text(w.pinyin, color = x.gold, fontSize = 14.sp)
@@ -331,32 +342,54 @@ private fun CharacterLearn(
 private enum class CKind { HANZI_TO_MEANING, HANZI_TO_PINYIN, SOUND_TO_HANZI, MEANING_TO_HANZI }
 private data class CQuestion(val word: HskWord, val kind: CKind, val options: List<String>, val answer: String)
 
-/** First, concise sense of a gloss — short enough to be a recognisable quiz option. */
-private fun shortGloss(w: HskWord): String =
-    w.meaning.split('/', ';', '；').map { it.trim() }.firstOrNull { it.isNotEmpty() }?.take(40)
-        ?: w.meaning.take(40)
+/** First *learnable* sense of a gloss — short enough to be a recognisable quiz option, and never
+    a metadata sense like "surname Huan" or a particle annotation (see [Gloss]). */
+private fun shortGloss(w: HskWord): String = Gloss.primary(w.meaning).ifBlank { w.meaning.take(40) }
 
-private fun distractors(pool: List<HskWord>, target: HskWord, field: (HskWord) -> String): List<String> {
+/** Speak a vocabulary item with the reading shown on screen — a lone polyphone is spoken inside
+    a carrier word so the audio matches the listed pinyin (off the main thread; tiny DB lookup). */
+private fun speakWord(graph: AppGraph, word: String, pinyin: String) {
+    graph.appScope.launch { graph.speaker.speak(graph.dictionary.audioTextFor(word, pinyin)) }
+}
+
+/** Pinyin normalised for "would these sound the same?" comparisons. */
+private fun pinyinKey(p: String) = p.lowercase().replace(" ", "").replace("'", "")
+
+/** Three wrong options via [field]. [conflict] keys out candidates that would *also* be a correct
+    answer — homophones on a sound question, same-meaning words on a meaning question. */
+private fun distractors(pool: List<HskWord>, target: HskWord, rng: Random,
+                        conflict: ((HskWord) -> String)? = null,
+                        field: (HskWord) -> String): List<String> {
     val correct = field(target)
-    return pool.asSequence().filter { it.word != target.word }.map(field)
-        .filter { it.isNotBlank() }.distinct().filter { it != correct }.toList().shuffled().take(3)
+    val clash = conflict?.invoke(target)
+    return pool.asSequence().filter { it.word != target.word }
+        .filter { conflict == null || conflict(it) != clash }
+        .map(field).filter { it.isNotBlank() }.distinct().filter { it != correct }
+        .toList().shuffled(rng).take(3)
 }
 
 /** Every word is tested in all four directions — shape→meaning, shape→reading, sound→shape and
-    meaning→shape — so a group trial drills recognition, recall and pronunciation together. */
-private fun buildCharTrial(group: List<HskWord>, pool: List<HskWord>): List<CQuestion> =
+    meaning→shape — so a group trial drills recognition, recall and pronunciation together.
+    Deterministic for a given [rng] seed, so a trial interrupted by a character-page detour
+    rebuilds the exact same questions. */
+private fun buildCharTrial(group: List<HskWord>, pool: List<HskWord>, rng: Random): List<CQuestion> =
     group.flatMap { w ->
         listOf(
             CQuestion(w, CKind.HANZI_TO_MEANING,
-                (distractors(pool, w) { shortGloss(it) } + shortGloss(w)).shuffled(), shortGloss(w)),
+                (distractors(pool, w, rng) { shortGloss(it) } + shortGloss(w)).shuffled(rng), shortGloss(w)),
             CQuestion(w, CKind.HANZI_TO_PINYIN,
-                (distractors(pool, w) { it.pinyin } + w.pinyin).shuffled(), w.pinyin),
+                (distractors(pool, w, rng, conflict = { pinyinKey(it.pinyin) }) { it.pinyin } + w.pinyin)
+                    .shuffled(rng), w.pinyin),
+            // hearing "tā" must not offer both 他 and 她 — homophones are excluded
             CQuestion(w, CKind.SOUND_TO_HANZI,
-                (distractors(pool, w) { it.word } + w.word).shuffled(), w.word),
+                (distractors(pool, w, rng, conflict = { pinyinKey(it.pinyin) }) { it.word } + w.word)
+                    .shuffled(rng), w.word),
+            // "which word means X" must not offer two words that both mean X
             CQuestion(w, CKind.MEANING_TO_HANZI,
-                (distractors(pool, w) { it.word } + w.word).shuffled(), w.word),
+                (distractors(pool, w, rng, conflict = { shortGloss(it) }) { it.word } + w.word)
+                    .shuffled(rng), w.word),
         )
-    }.shuffled()
+    }.shuffled(rng)
 
 @Composable
 private fun CharacterTrial(
@@ -366,14 +399,18 @@ private fun CharacterTrial(
     val x = Theme.x
     val settings = graph.settings
 
-    var attempt by remember { mutableStateOf(0) }
-    val questions = remember(groupIdx, attempt) { buildCharTrial(group, pool) }
-    var qIdx by remember(attempt) { mutableStateOf(0) }
-    var selected by remember(attempt) { mutableStateOf<String?>(null) }
-    var score by remember(attempt) { mutableStateOf(0) }
-    var finished by remember(attempt) { mutableStateOf(false) }
-    var finishedPct by remember(attempt) { mutableStateOf(0) }
-    var brokeThrough by remember(attempt) { mutableStateOf(false) }
+    // All trial state is saveable so a "study character" detour (or rotation) can't void the run.
+    // The question order is rebuilt from a saved seed — same shuffle, so qIdx still points at the
+    // same question when the trial is restored.
+    var attempt by rememberSaveable { mutableStateOf(0) }
+    val seed = rememberSaveable(groupIdx, attempt) { Random.nextLong() }
+    val questions = remember(seed) { buildCharTrial(group, pool, Random(seed)) }
+    var qIdx by rememberSaveable(attempt) { mutableStateOf(0) }
+    var selected by rememberSaveable(attempt) { mutableStateOf<String?>(null) }
+    var score by rememberSaveable(attempt) { mutableStateOf(0) }
+    var finished by rememberSaveable(attempt) { mutableStateOf(false) }
+    var finishedPct by rememberSaveable(attempt) { mutableStateOf(0) }
+    var brokeThrough by rememberSaveable(attempt) { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize().background(x.bg).padding(22.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -422,11 +459,11 @@ private fun CharacterTrial(
         LaunchedEffect(qIdx) { optScroll.scrollTo(0) }
         // a sound question speaks the word as it appears (and is replayable)
         LaunchedEffect(qIdx, attempt) {
-            if (q.kind == CKind.SOUND_TO_HANZI) graph.speaker.speak(q.word.word)
+            if (q.kind == CKind.SOUND_TO_HANZI) speakWord(graph, q.word.word, q.word.pinyin)
         }
 
         Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(optScroll)) {
-            Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(x.surface2).padding(vertical = 26.dp),
+            Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(x.promptWash(x.gold)).padding(vertical = 26.dp),
                 contentAlignment = Alignment.Center) {
                 when (q.kind) {
                     CKind.HANZI_TO_MEANING, CKind.HANZI_TO_PINYIN ->
@@ -440,7 +477,7 @@ private fun CharacterTrial(
                             // pinyin answer. (You still hear it the instant you answer, so it still teaches.)
                             if (q.kind == CKind.HANZI_TO_MEANING) {
                                 Spacer(Modifier.height(8.dp))
-                                Text("🔊", fontSize = 24.sp, modifier = Modifier.clickable { graph.speaker.speak(q.word.word) })
+                                Text("🔊", fontSize = 24.sp, modifier = Modifier.clickable { speakWord(graph, q.word.word, q.word.pinyin) })
                             }
                         }
                     CKind.MEANING_TO_HANZI ->
@@ -455,7 +492,7 @@ private fun CharacterTrial(
                             Text("which word did you hear?", color = x.textFaint, fontSize = 12.sp, letterSpacing = 1.sp)
                             Spacer(Modifier.height(14.dp))
                             Box(Modifier.size(82.dp).clip(CircleShape).background(x.cinnabar)
-                                .clickable { graph.speaker.speak(q.word.word) }, contentAlignment = Alignment.Center) {
+                                .clickable { speakWord(graph, q.word.word, q.word.pinyin) }, contentAlignment = Alignment.Center) {
                                 Text("🔊", fontSize = 36.sp)
                             }
                             Spacer(Modifier.height(8.dp))
@@ -480,7 +517,7 @@ private fun CharacterTrial(
                         val right = opt == q.answer
                         if (right) score++
                         if (right) graph.soundFx.correct() else graph.soundFx.wrong()   // interactive cue
-                        graph.speaker.speak(q.word.word)   // hear the word the moment you answer
+                        speakWord(graph, q.word.word, q.word.pinyin)   // hear the word the moment you answer
                     }.padding(vertical = 15.dp, horizontal = 16.dp), contentAlignment = Alignment.Center) {
                     Text(opt, fontFamily = SerifSC,
                         fontSize = if (hanziOptions) 28.sp else 16.sp, color = fg,
@@ -499,7 +536,7 @@ private fun CharacterTrial(
                         Text(q.word.pinyin, color = x.text, fontSize = 15.sp, fontWeight = FontWeight.Medium)
                         Text(q.word.meaning, color = x.textSoft, fontSize = 12.sp, lineHeight = 16.sp, maxLines = 2)
                     }
-                    Text("🔊", fontSize = 22.sp, modifier = Modifier.clickable { graph.speaker.speak(q.word.word) })
+                    Text("🔊", fontSize = 22.sp, modifier = Modifier.clickable { speakWord(graph, q.word.word, q.word.pinyin) })
                 }
             }
         }

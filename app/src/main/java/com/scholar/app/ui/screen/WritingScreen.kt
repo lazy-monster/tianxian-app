@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.asComposePath
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -70,6 +71,11 @@ fun WritingScreen(graph: AppGraph, ch: String, onBack: () -> Unit, onOpenChar: (
                 Text("No stroke data for this character yet.", color = x.textFaint)
             }
         } else {
+            // Parse each stroke outline once per character; redraws (every drag sample while
+            // tracing) then only re-stamp ready-made paths under a canvas transform.
+            val strokePaths = remember(d) {
+                d.strokes.map { PathParser.createPathFromPathData(it).asComposePath() }
+            }
             Box(
                 Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(20.dp)).background(x.surface)
                     .pointerInput(ch) {
@@ -82,17 +88,17 @@ fun WritingScreen(graph: AppGraph, ch: String, onBack: () -> Unit, onOpenChar: (
             ) {
                 Canvas(Modifier.fillMaxSize()) {
                     val s = size.minDimension / 1024f
-                    fun parse(p: String): Path {
-                        val ap = PathParser.createPathFromPathData(p)
-                        val m = android.graphics.Matrix()
-                        m.setValues(floatArrayOf(s, 0f, 0f, 0f, -s, 900f * s, 0f, 0f, 1f))
-                        ap.transform(m)
-                        return ap.asComposePath()
+                    // Make Me a Hanzi's documented matrix(1,0,0,-1,0,900), scaled to the canvas:
+                    // x' = s·x, y' = 900s − s·y  (translate is applied after the flip+scale)
+                    withTransform({
+                        translate(top = 900f * s)
+                        scale(s, -s, pivot = Offset.Zero)
+                    }) {
+                        // faint guide of the whole character
+                        strokePaths.forEach { drawPath(it, color = x.line) }
+                        // revealed strokes in ink
+                        strokePaths.take(shown).forEach { drawPath(it, color = x.text) }
                     }
-                    // faint guide of the whole character
-                    d.strokes.forEach { drawPath(parse(it), color = x.line) }
-                    // revealed strokes in ink
-                    d.strokes.take(shown).forEach { drawPath(parse(it), color = x.text) }
                     // user's traced ink
                     (traces + listOf(current)).forEach { pts ->
                         if (pts.size > 1) {

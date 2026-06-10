@@ -34,9 +34,11 @@ jobs:
         with:
           gradle-version: "8.9"
 
-      # Decodes the upload keystore from the KEYSTORE_BASE64 secret. If that secret is absent the
-      # build still succeeds — it just falls back to debug signing (fine for testing, not for store
-      # distribution). To sign for real, set the four repo secrets described in the README.
+      # Decode the signing keystore from the KEYSTORE_BASE64 secret. The keystore itself is never
+      # committed (see .gitignore) — CI receives it only through this secret. A release MUST be
+      # signed with this one stable key: the old debug-signing fallback minted a fresh throwaway
+      # key on every CI run, so each published "release" conflicted with the previous install
+      # instead of updating it.
       - name: Decode keystore
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
@@ -44,8 +46,6 @@ jobs:
           if [ -n "$KEYSTORE_BASE64" ]; then
             echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
             echo "KEYSTORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
-          else
-            echo "::warning::No KEYSTORE_BASE64 secret — producing a debug-signed release APK."
           fi
 
       - name: Build release APK
@@ -53,7 +53,18 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: gradle assembleRelease
+        run: |
+          if [ -z "$KEYSTORE_FILE" ] || [ -z "$KEYSTORE_PASSWORD" ] || [ -z "$KEY_ALIAS" ] || [ -z "$KEY_PASSWORD" ]; then
+            echo "::error::Release signing is not configured. Set the four repo secrets (KEYSTORE_BASE64, KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD) — see docs/DEVELOPMENT.md. Refusing to publish a debug-signed release: its key changes every run, so installed copies could never update."
+            exit 1
+          fi
+          gradle assembleRelease
+
+      # Make signing auditable: this fingerprint must be identical on every release, or Android
+      # rejects the update as a package conflict.
+      - name: Print signing certificate
+        run: |
+          "$ANDROID_HOME"/build-tools/35.0.0/apksigner verify --print-certs app/build/outputs/apk/release/*.apk | grep -i "SHA-256" | head -2
 
       - name: Stage APK
         run: |

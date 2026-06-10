@@ -37,6 +37,36 @@ class DictionaryRepository(private val content: ContentStore) {
     fun charactersWithRadical(radical: String) = content.charactersWithRadical(radical)
     fun hskWords(levelKey: String, limit: Int = 200) = content.hskWords(levelKey, limit)
     fun examples(word: String, limit: Int = 4) = content.examples(word, limit)
+
+    /**
+     * What to feed the TTS so a *single character* is pronounced with the reading shown on screen.
+     * Engines pick a lone polyphone's (多音字) default reading from no context — 还 alone says
+     * "hái" even when the card teaches huán. When the displayed reading is a secondary one,
+     * return a common word carrying that reading (归还) so the user hears what they see;
+     * otherwise the character itself. Multi-character text passes through untouched (engines
+     * disambiguate words correctly).
+     */
+    fun audioTextFor(text: String, displayedPinyin: String): String {
+        if (text.length != 1 || text[0].code !in 0x4E00..0x9FFF) return text
+        val target = firstSyllable(displayedPinyin) ?: return text
+        val readings = content.readingsOf(text).map { norm(Pinyin.toned(it)) }.distinct()
+        if (readings.size <= 1 || readings.first() == target) return text   // default reading is right
+        if (target !in readings) return text                                // unknown reading — don't guess
+        val carrier = content.wordsContaining(text).firstOrNull { e ->
+            val i = e.simplified.indexOf(text)
+            i >= 0 && norm(Pinyin.tonedSyllables(e.pinyin).getOrNull(i) ?: "") == target
+        }
+        return carrier?.simplified ?: text
+    }
+
+    private fun norm(s: String): String =
+        java.text.Normalizer.normalize(s.trim().lowercase(), java.text.Normalizer.Form.NFC)
+
+    /** First syllable of a displayed pinyin ("hái; huán" → "hái"), tolerating numeric input. */
+    private fun firstSyllable(p: String): String? {
+        val tok = p.split(' ', ';', ',', '/', '·').firstOrNull { it.isNotBlank() }?.trim() ?: return null
+        return norm(if (tok.any { it.isDigit() }) Pinyin.toned(tok) else tok).ifBlank { null }
+    }
 }
 
 /* ── Known characters (drives "Characters Known") ───────────────────── */
@@ -44,11 +74,16 @@ class KnownRepository(private val dao: KnownDao) {
     fun knownCountFlow(): Flow<Int> = dao.knownCountFlow()
     suspend fun knownSet(): Set<String> = dao.knownChars().toHashSet()
 
+    /** Strengthen the given characters. Strength only ratchets up (a later, weaker signal must
+        not erase "mark known"), and the original firstSeen timestamp is preserved. */
     suspend fun reinforce(text: String, delta: Double) {
         val now = System.currentTimeMillis()
+        val d = delta.coerceIn(0.0, 1.0)
         text.forEach { c ->
             if (c.code in 0x4E00..0x9FFF) {
-                dao.upsert(KnownCharEntity(c.toString(), delta.coerceIn(0.0, 1.0), now, now))
+                val prev = dao.get(c.toString())
+                dao.upsert(KnownCharEntity(c.toString(), maxOf(prev?.strength ?: 0.0, d),
+                    prev?.firstSeenMillis ?: now, now))
             }
         }
     }
@@ -94,13 +129,24 @@ class CardRepository(
         )
     }
 
-    fun project(card: CardEntity) = scheduler().project(
+    /** A single card by id — used to re-queue a freshly graded "Again" card in-session. */
+    suspend fun card(id: Long): CardEntity? = cardDao.get(id)
+
+    /** Cards for [ids], in the same order (duplicates preserved) — restores a saved session queue. */
+    suspend fun byIds(ids: List<Long>): List<CardEntity> {
+        if (ids.isEmpty()) return emptyList()
+        val byId = cardDao.byIds(ids.distinct()).associateBy { it.id }
+        return ids.mapNotNull { byId[it] }
+    }
+
+    suspend fun project(card: CardEntity) = scheduler().project(
         card.stability, card.difficulty, elapsedDays(card), reps = card.reps,
     )
 
     suspend fun grade(card: CardEntity, rating: Rating) {
         val now = System.currentTimeMillis()
-        val res = scheduler().apply(card.stability, card.difficulty, elapsedDays(card), card.reps, rating)
+        val elapsed = elapsedDays(card)
+        val res = scheduler().apply(card.stability, card.difficulty, elapsed, card.reps, rating)
         val dueMillis = now + (res.intervalDays * 86_400_000L).toLong()
         cardDao.update(
             card.copy(
@@ -113,15 +159,22 @@ class CardRepository(
         logDao.insert(ReviewLogEntity(
             cardId = card.id, rating = rating.value, reviewedAtMillis = now,
             lastStability = card.stability, lastDifficulty = card.difficulty,
-            elapsedDays = elapsedDays(card),
+            elapsedDays = elapsed,
         ))
         // recognition success strengthens the underlying character(s)
         if (rating != Rating.AGAIN) known.reinforce(card.frontRef, 0.7)
     }
 
-    private fun elapsedDays(card: CardEntity): Double =
-        if (card.reps == 0) 0.0
-        else ((System.currentTimeMillis() - card.dueEpochMillis).coerceAtLeast(0)) / 86_400_000.0
+    /** Days since this card was last *reviewed* (not since it came due) — what the FSRS
+        forgetting curve is parameterised on. Anchored to the review log; for cards that
+        predate per-card logs, reconstructed as overdue time plus the scheduled interval. */
+    private suspend fun elapsedDays(card: CardEntity): Double {
+        if (card.reps == 0) return 0.0
+        val now = System.currentTimeMillis()
+        logDao.lastReviewFor(card.id)?.let { return (now - it).coerceAtLeast(0) / 86_400_000.0 }
+        val overdue = (now - card.dueEpochMillis) / 86_400_000.0
+        return (overdue + scheduler().fsrs.intervalDays(card.stability)).coerceAtLeast(0.0)
+    }
 
     private fun epochDay(millis: Long): Long =
         java.time.Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).toLocalDate().toEpochDay()
@@ -154,13 +207,28 @@ class BookRepository(
         runCatching { BookCache.read(File(e.cachePath)) }.getOrNull()
     }
 
-    suspend fun savePosition(id: String, chapter: Int, block: Int) {
-        bookDao.get(id)?.let { bookDao.upsert(it.copy(posChapter = chapter, posBlock = block)) }
-    }
+    suspend fun savePosition(id: String, chapter: Int, block: Int) =
+        bookDao.updatePosition(id, chapter, block)
 
     /** Where the reader should resume this book (defaults to the start for new/unknown books). */
     suspend fun position(id: String): ReadingPosition =
         bookDao.get(id)?.let { ReadingPosition(it.posChapter, it.posBlock) } ?: ReadingPosition(0, 0)
+
+    /** Recompute every book's "X% readable" against what the user knows *now*. Coverage is
+        cached at import time and goes stale as characters are learned; this refreshes it from
+        the cached char profiles. Throttled — it re-reads each book's cache file. */
+    suspend fun refreshCoverage(): Unit = withContext(Dispatchers.IO) {
+        val now = System.currentTimeMillis()
+        if (now - lastCoverageRefresh < 60_000L) return@withContext
+        lastCoverageRefresh = now
+        val knownSet = known.knownSet()
+        bookDao.all().forEach { e ->
+            val doc = runCatching { BookCache.read(File(e.cachePath)) }.getOrNull() ?: return@forEach
+            val cov = coverage(doc, knownSet)
+            if (cov != e.coverage) bookDao.updateCoverage(e.id, cov)
+        }
+    }
+    @Volatile private var lastCoverageRefresh = 0L
 
     /** Remove a book entirely: its row, cached text, and any page images. */
     suspend fun delete(id: String) {

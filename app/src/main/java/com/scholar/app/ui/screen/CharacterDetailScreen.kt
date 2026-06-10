@@ -20,6 +20,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.scholar.app.data.content.CharInfo
+import com.scholar.app.data.content.Gloss
 import com.scholar.app.data.content.Sentence
 import com.scholar.app.di.AppGraph
 import com.scholar.app.srs.CardType
@@ -48,6 +49,7 @@ fun CharacterDetailScreen(
             components = graph.dictionary.components(ch)
             hasStrokes = graph.dictionary.strokeData(ch) != null
             examples = graph.dictionary.examples(ch)
+            mined = graph.cards.minedAmong(listOf(ch)).isNotEmpty()
         }
     }
 
@@ -69,13 +71,18 @@ fun CharacterDetailScreen(
                 }.joinToString("  ·  ")
                 if (tags.isNotEmpty()) Text(tags, color = x.textFaint, fontSize = 12.sp)
                 Spacer(Modifier.height(6.dp))
-                Text("🔊 Hear it", color = x.jade, fontSize = 14.sp, modifier = Modifier.clickable { graph.speaker.speak(ch) })
+                Text("🔊 Hear it", color = x.jade, fontSize = 14.sp, modifier = Modifier.clickable {
+                    // speak with the displayed reading (a lone polyphone is wrapped in a carrier word)
+                    val py = info?.pinyin ?: ""
+                    scope.launch(Dispatchers.IO) { graph.speaker.speak(graph.dictionary.audioTextFor(ch, py)) }
+                })
             }
         }
 
         Spacer(Modifier.height(16.dp))
         info?.definition?.takeIf { it.isNotBlank() }?.let {
-            Text(it, color = x.textSoft, fontSize = 15.sp, lineHeight = 22.sp)
+            // meaning-first: "surname …" / "variant of …" senses stay visible but never lead
+            Text(Gloss.display(it), color = x.textSoft, fontSize = 15.sp, lineHeight = 22.sp)
             Spacer(Modifier.height(16.dp))
         }
 
@@ -88,7 +95,7 @@ fun CharacterDetailScreen(
                         .clickable { onOpenChar(c.char) }.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(c.char, fontFamily = SerifSC, fontSize = 34.sp, color = x.text)
                         Text(c.pinyin.take(8), color = x.gold, fontSize = 12.sp)
-                        Text(c.definition.take(16), color = x.textFaint, fontSize = 10.sp)
+                        Text(Gloss.primary(c.definition, 16), color = x.textFaint, fontSize = 10.sp)
                     }
                 }
             }
@@ -124,9 +131,11 @@ fun CharacterDetailScreen(
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
             ActionButton(if (hasStrokes) "✍ Practise writing" else "✍ Writing (no data)", x.cinnabar, Modifier.weight(1f),
                 enabled = hasStrokes) { onPractice(ch) }
-            ActionButton(if (mined) "✓ In deck" else "+ Add to deck", x.surface2, Modifier.weight(1f)) {
+            ActionButton(if (mined) "✓ In deck" else "+ Add to deck", x.surface2, Modifier.weight(1f),
+                enabled = info != null) {   // wait for the gloss so the card never has an empty back
                 if (!mined) scope.launch {
-                    graph.cards.mine(ch, "${info?.pinyin ?: ""} · ${info?.definition ?: ""}", CardType.CHAR_RECOGNITION, "character")
+                    graph.cards.mine(ch, "${info?.pinyin ?: ""} · ${Gloss.display(info?.definition ?: "")}",
+                        CardType.CHAR_RECOGNITION, "character")
                     mined = true
                 }
             }

@@ -25,16 +25,20 @@ class Ingestor(private val context: Context) {
                 val name = displayName ?: uri.lastPathSegment ?: "imported"
                 val title = name.substringBeforeLast('.').ifBlank { "Imported text" }
                 val tmp = copyToCache(uri, name)
-                val doc = when (FormatDetector.detect(tmp, name)) {
-                    BookFormat.EPUB -> EpubParser.parse(context, tmp, title)
-                    BookFormat.TXT -> TxtParser.parse(tmp, title)
-                    BookFormat.MOBI, BookFormat.AZW3 -> MobiParser.parse(tmp, title)
-                    BookFormat.PDF_TEXT, BookFormat.PDF_SCANNED -> PdfExtractor(context).parse(tmp, title)
-                    BookFormat.IMAGES -> Ocr(context).parseImage(tmp, title)
-                    BookFormat.CBZ -> CbzParser.parse(context, tmp, title)
-                    BookFormat.UNKNOWN -> error("Unsupported file. Use EPUB, PDF, MOBI, TXT, CBZ, or a page photo.")
+                try {
+                    val doc = when (FormatDetector.detect(tmp, name)) {
+                        BookFormat.EPUB -> EpubParser.parse(context, tmp, title)
+                        BookFormat.TXT -> TxtParser.parse(tmp, title)
+                        BookFormat.MOBI, BookFormat.AZW3 -> MobiParser.parse(tmp, title)
+                        BookFormat.PDF_TEXT, BookFormat.PDF_SCANNED -> PdfExtractor(context).parse(tmp, title)
+                        BookFormat.IMAGES -> Ocr(context).parseImage(tmp, title)
+                        BookFormat.CBZ -> CbzParser.parse(context, tmp, title)
+                        BookFormat.UNKNOWN -> error("Unsupported file. Use EPUB, PDF, MOBI, TXT, CBZ, or a page photo.")
+                    }
+                    doc.withCharProfile()
+                } finally {
+                    tmp.delete()   // the parsed content is cached separately; don't pile imports up in cacheDir
                 }
-                doc.withCharProfile()
             }
         }
 

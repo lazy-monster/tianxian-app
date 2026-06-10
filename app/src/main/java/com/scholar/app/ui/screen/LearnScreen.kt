@@ -4,7 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.sp
 import com.scholar.app.di.AppGraph
 import com.scholar.app.ui.theme.SerifSC
 import com.scholar.app.ui.theme.Theme
+import com.scholar.app.ui.theme.glyphTint
 
 private data class Section(
     val route: String, val glyph: String, val title: String, val subtitle: String, val stage: String,
@@ -42,12 +43,14 @@ fun LearnScreen(graph: AppGraph, onOpen: (String) -> Unit) {
                 color = x.textSoft, fontSize = 14.sp, lineHeight = 20.sp)
             Spacer(Modifier.height(6.dp))
         }
-        items(SECTIONS) { s ->
+        itemsIndexed(SECTIONS) { i, s ->
+            // each stage gets its own accent so the curriculum reads as a colourful path, not a list
+            val accent = listOf(x.gold, x.cinnabar, x.jade, x.gold, x.cinnabar)[i % 5]
             Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(x.surface)
                 .clickable { onOpen(s.route) }.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(58.dp).clip(RoundedCornerShape(16.dp)).background(x.surface2),
+                Box(Modifier.size(58.dp).clip(RoundedCornerShape(16.dp)).background(x.glyphTint(accent)),
                     contentAlignment = Alignment.Center) {
-                    Text(s.glyph, fontFamily = SerifSC, fontSize = 32.sp, color = x.gold)
+                    Text(s.glyph, fontFamily = SerifSC, fontSize = 32.sp, color = accent)
                 }
                 Spacer(Modifier.width(15.dp))
                 Column(Modifier.weight(1f)) {

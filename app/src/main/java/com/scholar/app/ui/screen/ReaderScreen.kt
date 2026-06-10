@@ -54,6 +54,7 @@ import com.scholar.app.ui.theme.readerFont
 import com.scholar.app.ui.theme.readerPalette
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -68,7 +69,10 @@ private const val CHAPTER_ADVANCE_PX = 300f
 
 private data class Tok(val text: String, val isWord: Boolean, val start: Int, val end: Int)
 private data class Popup(val word: String, val pinyin: String, val gloss: String,
-                         val tags: List<String>, val examples: List<com.scholar.app.data.content.Sentence>)
+                         val tags: List<String>, val examples: List<com.scholar.app.data.content.Sentence>,
+                         val mined: Boolean,
+                         /** What to feed the TTS so a lone polyphone matches the shown pinyin. */
+                         val audio: String)
 /** One spoken unit: which text block, the char range within it, and the words to read. */
 private data class Utt(val block: Int, val range: IntRange, val text: String)
 
@@ -282,10 +286,20 @@ fun ReaderScreen(graph: AppGraph, bookId: String, onBack: () -> Unit, onOpenChar
         }
     }
 
-    // persist reading position as the user scrolls (block ≈ first visible item, minus the header)
+    // persist reading position as the user scrolls (block ≈ first visible item, minus the header),
+    // debounced so a long fling doesn't issue a DB write per row it passes
     LaunchedEffect(chapter) {
-        snapshotFlow { lazyState.firstVisibleItemIndex }.distinctUntilChanged().collect { idx ->
+        snapshotFlow { lazyState.firstVisibleItemIndex }.distinctUntilChanged().collectLatest { idx ->
+            delay(400)
             graph.books.savePosition(bookId, chapterIdx, (idx - 1).coerceAtLeast(0))
+        }
+    }
+
+    // the debounce above can swallow the final write when the reader is closed — flush it on exit
+    DisposableEffect(Unit) {
+        onDispose {
+            val block = (lazyState.firstVisibleItemIndex - 1).coerceAtLeast(0)
+            graph.appScope.launch { graph.books.savePosition(bookId, chapterIdx, block) }
         }
     }
 
@@ -595,7 +609,7 @@ private fun WordSheet(graph: AppGraph, p: Popup, source: String, onOpenChar: (St
                 Spacer(Modifier.width(12.dp))
                 Text(p.pinyin, color = x.gold, fontSize = 20.sp)
                 Spacer(Modifier.weight(1f))
-                Text("🔊", fontSize = 24.sp, modifier = Modifier.clickable { graph.speaker.speak(p.word) })
+                Text("🔊", fontSize = 24.sp, modifier = Modifier.clickable { graph.speaker.speak(p.audio) })
             }
             Spacer(Modifier.height(12.dp))
             Text(p.gloss, color = x.text, fontSize = 15.sp, lineHeight = 22.sp)
@@ -635,8 +649,11 @@ private fun WordSheet(graph: AppGraph, p: Popup, source: String, onOpenChar: (St
                             if (p.word.length == 1) CardType.CHAR_RECOGNITION else CardType.WORD_RECOGNITION, source)
                         onDismiss()
                     }
-                }, colors = ButtonDefaults.buttonColors(containerColor = x.cinnabar),
-                    modifier = Modifier.weight(1f)) { Text("+ Add to deck", color = Color.White) }
+                }, enabled = !p.mined,
+                    colors = ButtonDefaults.buttonColors(containerColor = x.cinnabar, disabledContainerColor = x.surface),
+                    modifier = Modifier.weight(1f)) {
+                    Text(if (p.mined) "✓ In deck" else "+ Add to deck", color = if (p.mined) x.jade else Color.White)
+                }
                 OutlinedButton(onClick = onMarkKnown, modifier = Modifier.weight(1f)) { Text("Mark known", color = x.text) }
             }
         }
@@ -646,15 +663,20 @@ private fun WordSheet(graph: AppGraph, p: Popup, source: String, onOpenChar: (St
 private suspend fun buildPopup(graph: AppGraph, word: String): Popup = withContext(Dispatchers.IO) {
     val examples = graph.dictionary.examples(word, 3)
     val entry = graph.dictionary.lookup(word)
+    val mined = graph.cards.minedAmong(listOf(word)).isNotEmpty()
     if (entry != null) {
         val tags = buildList {
             entry.freqRank?.let { add("freq #$it") }
             if (word.length == 1) add("char")
         }
-        Popup(entry.simplified, graph.dictionary.toned(entry.pinyin), entry.gloss, tags, examples)
+        Popup(entry.simplified, graph.dictionary.toned(entry.pinyin),
+            com.scholar.app.data.content.Gloss.display(entry.gloss), tags, examples, mined,
+            audio = graph.dictionary.audioTextFor(entry.simplified, entry.pinyin))
     } else {
         val ci = graph.dictionary.character(word)
-        Popup(word, ci?.pinyin ?: "", ci?.definition ?: "(no entry)",
-            buildList { ci?.radical?.takeIf { it.isNotEmpty() }?.let { add("radical $it") } }, examples)
+        Popup(word, ci?.pinyin ?: "",
+            ci?.definition?.let { com.scholar.app.data.content.Gloss.display(it) } ?: "(no entry)",
+            buildList { ci?.radical?.takeIf { it.isNotEmpty() }?.let { add("radical $it") } }, examples, mined,
+            audio = graph.dictionary.audioTextFor(word, ci?.pinyin ?: ""))
     }
 }

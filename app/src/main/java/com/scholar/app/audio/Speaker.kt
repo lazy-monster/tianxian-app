@@ -32,7 +32,12 @@ class Speaker(context: Context) {
 
     private val tts: TextToSpeech = TextToSpeech(context.applicationContext) { status ->
         if (status == TextToSpeech.SUCCESS) {
-            tts.language = Locale.SIMPLIFIED_CHINESE
+            // Prefer the Mainland voice; fall back to any Chinese voice rather than ending up
+            // on the system default (which would read hanzi with English letter names).
+            val r = tts.setLanguage(Locale.SIMPLIFIED_CHINESE)
+            if (r == TextToSpeech.LANG_MISSING_DATA || r == TextToSpeech.LANG_NOT_SUPPORTED) {
+                tts.setLanguage(Locale.CHINESE)
+            }
             tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                 override fun onStart(utteranceId: String?) {
                     val (tk, i) = parse(utteranceId) ?: return
@@ -52,13 +57,20 @@ class Speaker(context: Context) {
         }
     }
 
-    /** One word/phrase, interrupting anything currently playing. The "single" id has no token so it
-        is ignored by the sequence callbacks. */
+    // The user's read-aloud speed. Applied per sequence utterance, never to one-shot words —
+    // otherwise a slow reader session would leave every 🔊 tap in the app playing slow too.
+    private var sequenceRate = 1.0f
+
+    /** One word/phrase at natural speed, interrupting anything currently playing. The "single"
+        id has no token so it is ignored by the sequence callbacks. */
     fun speak(text: String) {
-        if (ready && text.isNotBlank()) tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "single")
+        if (!ready || text.isBlank()) return
+        tts.setSpeechRate(1.0f)
+        tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "single")
     }
 
-    fun setRate(rate: Float) { if (ready) tts.setSpeechRate(rate) }
+    /** Set the read-aloud (sequence) speed. One-shot [speak] always stays at natural speed. */
+    fun setRate(rate: Float) { sequenceRate = rate }
 
     /**
      * Read [items] in order starting at [startAt]. [onIndex] fires (on the main thread) as each
@@ -100,6 +112,7 @@ class Speaker(context: Context) {
 
     private fun speakAt(i: Int) {
         current = i
+        tts.setSpeechRate(sequenceRate)
         tts.speak(items[i], TextToSpeech.QUEUE_FLUSH, null, "$token:$i")
     }
 

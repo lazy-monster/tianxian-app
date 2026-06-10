@@ -42,7 +42,11 @@ fun WritingPickerScreen(graph: AppGraph, onBack: () -> Unit, onPractice: (String
         ScreenHeader("Handwriting", "Type any character to practise, or pick a common one below.", onBack)
 
         TextField(
-            value = typed, onValueChange = { typed = it.takeLast(1) },
+            // keep only the last Han character — stroke data only exists for hanzi, so latin
+            // keystrokes (pre-IME-commit) never land in the field as a dead "no data" target
+            value = typed, onValueChange = { input ->
+                typed = input.lastOrNull { it.code in 0x4E00..0x9FFF }?.toString() ?: ""
+            },
             placeholder = { Text("Type a character…", color = x.textFaint) },
             singleLine = true,
             keyboardActions = KeyboardActions(onDone = { if (typed.isNotBlank()) onPractice(typed) }),

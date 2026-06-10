@@ -145,7 +145,9 @@ fun ScholarRoot(graph: AppGraph, themeId: String, onSetTheme: (String) -> Unit, 
             composable("read") { LibraryScreen(graph, onOpenBook = { id -> nav.navigate("reader/$id") }) }
             composable("review") { ReviewScreen(graph, onOpenChar = { ch -> nav.navigate("char/$ch") }) }
             composable("dict") { DictionaryScreen(graph, onOpenChar = { ch -> nav.navigate("char/$ch") }) }
-            composable("settings") { SettingsScreen(graph, themeId, onSetTheme, onBack = { nav.popBackStack() }) }
+            composable("settings") { SettingsScreen(graph, themeId, onSetTheme, onBack = { nav.popBackStack() },
+                onOpenGuide = { nav.navigate("guide") }) }
+            composable("guide") { GuideScreen(onBack = { nav.popBackStack() }) }
 
             composable("reader/{id}") { e ->
                 ReaderScreen(graph, bookId = e.arguments?.getString("id").orEmpty(),

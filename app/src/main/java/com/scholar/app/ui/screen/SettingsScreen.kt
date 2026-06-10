@@ -42,7 +42,8 @@ import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 @Composable
-fun SettingsScreen(graph: AppGraph, themeId: String, onSetTheme: (String) -> Unit, onBack: () -> Unit) {
+fun SettingsScreen(graph: AppGraph, themeId: String, onSetTheme: (String) -> Unit, onBack: () -> Unit,
+                   onOpenGuide: () -> Unit = {}) {
     val x = Theme.x
     val context = LocalContext.current
     val settings = graph.settings
@@ -106,6 +107,18 @@ fun SettingsScreen(graph: AppGraph, themeId: String, onSetTheme: (String) -> Uni
 
     Column(Modifier.fillMaxSize().background(x.bg).verticalScroll(rememberScrollState()).padding(horizontal = 22.dp)) {
         ScreenHeader("Settings", onBack = onBack)
+
+        // ── The handbook ─────────────────────────────────────────────────
+        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(x.surface2)
+            .clickable { onOpenGuide() }.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("📜 Scholar's Path · 指南", color = x.text, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                Text("The recommended workflow for reading webnovels — what to learn, in what order, and why the sounds matter.",
+                    color = x.textSoft, fontSize = 13.sp, lineHeight = 18.sp)
+            }
+            Text("›", color = x.gold, fontSize = 22.sp)
+        }
+        Spacer(Modifier.height(20.dp))
 
         // ── Appearance: app skin ─────────────────────────────────────────
         Text("Appearance", fontFamily = SerifSC, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = x.text)

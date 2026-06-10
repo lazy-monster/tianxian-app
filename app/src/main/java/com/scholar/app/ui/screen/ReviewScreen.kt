@@ -8,6 +8,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -15,12 +16,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.scholar.app.data.content.Gloss
 import com.scholar.app.data.user.CardEntity
 import com.scholar.app.di.AppGraph
 import com.scholar.app.srs.GradeProjection
 import com.scholar.app.srs.Rating
 import com.scholar.app.ui.theme.SerifSC
 import com.scholar.app.ui.theme.Theme
+import com.scholar.app.ui.theme.promptWash
 import kotlinx.coroutines.launch
 
 @Composable
@@ -28,18 +31,28 @@ fun ReviewScreen(graph: AppGraph, onOpenChar: (String) -> Unit = {}) {
     val x = Theme.x
     val scope = rememberCoroutineScope()
     var queue by remember { mutableStateOf<List<CardEntity>>(emptyList()) }
-    var idx by remember { mutableStateOf(0) }
-    var flipped by remember { mutableStateOf(false) }
+    // Session state is *saveable*: detouring to a character page (or rotating) disposes this
+    // composition, so plain remember would dump the queue and counts. The queue itself is
+    // restored from saved card ids on return, landing on the same card with progress intact.
+    var sessionIds by rememberSaveable { mutableStateOf(longArrayOf()) }
+    var idx by rememberSaveable { mutableStateOf(0) }
+    var flipped by rememberSaveable { mutableStateOf(false) }
     var loading by remember { mutableStateOf(true) }
-    var reviewed by remember { mutableStateOf(0) }
-    var correct by remember { mutableStateOf(0) }      // graded better than Again
-    var ahead by remember { mutableStateOf(false) }    // this session pulled not-yet-due cards
+    var reviewed by rememberSaveable { mutableStateOf(0) }
+    var correct by rememberSaveable { mutableStateOf(0) }      // graded better than Again
+    var ahead by rememberSaveable { mutableStateOf(false) }    // this session pulled not-yet-due cards
     var deckHasCards by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
-        val due = graph.cards.due()
-        queue = due
-        deckHasCards = due.isNotEmpty() || graph.cards.ahead(1).isNotEmpty()
+        if (sessionIds.isNotEmpty()) {
+            queue = graph.cards.byIds(sessionIds.toList())   // resume the interrupted session
+            deckHasCards = true
+        } else {
+            val due = graph.cards.due()
+            queue = due
+            sessionIds = due.map { it.id }.toLongArray()
+            deckHasCards = due.isNotEmpty() || graph.cards.ahead(1).isNotEmpty()
+        }
         loading = false
     }
 
@@ -47,7 +60,8 @@ fun ReviewScreen(graph: AppGraph, onOpenChar: (String) -> Unit = {}) {
     fun reviewAhead() {
         scope.launch {
             val q = graph.cards.ahead(20)
-            queue = q; idx = 0; reviewed = 0; correct = 0; flipped = false; ahead = true
+            queue = q; sessionIds = q.map { it.id }.toLongArray()
+            idx = 0; reviewed = 0; correct = 0; flipped = false; ahead = true
         }
     }
 
@@ -85,8 +99,24 @@ fun ReviewScreen(graph: AppGraph, onOpenChar: (String) -> Unit = {}) {
         return
     }
 
-    val projections = remember(card.id) { graph.cards.project(card) }
+    // projections hit the review log (for elapsed time), so they load off the main thread;
+    // keyed on idx as well as id because an "Again" card can reappear later in the same queue
+    val projections by produceState(emptyList<GradeProjection>(), card.id, idx) {
+        value = graph.cards.project(card)
+    }
     val total = queue.size
+
+    fun onGrade(rating: Rating) {
+        // Write on the app scope so the grade survives leaving the screen mid-session; an
+        // "Again" card goes back to the end of the queue for in-session relearning.
+        val write = graph.appScope.launch { graph.cards.grade(card, rating) }
+        if (rating == Rating.AGAIN) scope.launch {
+            write.join()
+            graph.cards.card(card.id)?.let { queue = queue + it; sessionIds += card.id }
+        }
+        idx++; flipped = false; reviewed++
+        if (rating != Rating.AGAIN) correct++
+    }
 
     Column(Modifier.fillMaxSize().background(x.bg).padding(22.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -105,7 +135,8 @@ fun ReviewScreen(graph: AppGraph, onOpenChar: (String) -> Unit = {}) {
         // controls out of reach. Short cards still sit centred.
         val cardScroll = rememberScrollState()
         LaunchedEffect(card.id, flipped) { cardScroll.scrollTo(0) }
-        Box(Modifier.weight(1f).fillMaxWidth().clip(RoundedCornerShape(26.dp)).background(x.surface2)
+        Box(Modifier.weight(1f).fillMaxWidth().clip(RoundedCornerShape(26.dp))
+            .background(x.promptWash(if (flipped) x.jade else x.gold))
             .clickable { flipped = true }, contentAlignment = Alignment.Center) {
             Column(
                 Modifier.verticalScroll(cardScroll).padding(vertical = 24.dp, horizontal = 8.dp),
@@ -121,7 +152,11 @@ fun ReviewScreen(graph: AppGraph, onOpenChar: (String) -> Unit = {}) {
                     Text(coreGloss(parts.getOrElse(1) { card.backRef }), color = x.text, fontSize = 17.sp,
                         modifier = Modifier.padding(horizontal = 24.dp))
                     Spacer(Modifier.height(12.dp))
-                    Text("🔊", fontSize = 26.sp, modifier = Modifier.clickable { graph.speaker.speak(card.frontRef) })
+                    Text("🔊", fontSize = 26.sp, modifier = Modifier.clickable {
+                        // polyphone-safe: a lone char is spoken with the reading this card shows
+                        val py = parts.getOrElse(0) { "" }
+                        graph.appScope.launch { graph.speaker.speak(graph.dictionary.audioTextFor(card.frontRef, py)) }
+                    })
                     if (card.frontRef.any { it.code in 0x4E00..0x9FFF }) {
                         Spacer(Modifier.height(14.dp))
                         Text("study character", color = x.textFaint, fontSize = 11.sp, letterSpacing = 1.sp)
@@ -138,10 +173,10 @@ fun ReviewScreen(graph: AppGraph, onOpenChar: (String) -> Unit = {}) {
         Spacer(Modifier.height(16.dp))
         if (flipped) {
             Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-                GradeButton(projections, Rating.AGAIN, "Again", x.cinnabar, Modifier.weight(1f)) { grade(graph, scope, card, it) { idx++; flipped = false; reviewed++; if (it != Rating.AGAIN) correct++ } }
-                GradeButton(projections, Rating.HARD, "Hard", x.gold, Modifier.weight(1f)) { grade(graph, scope, card, it) { idx++; flipped = false; reviewed++; if (it != Rating.AGAIN) correct++ } }
-                GradeButton(projections, Rating.GOOD, "Good", x.jade, Modifier.weight(1f)) { grade(graph, scope, card, it) { idx++; flipped = false; reviewed++; if (it != Rating.AGAIN) correct++ } }
-                GradeButton(projections, Rating.EASY, "Easy", Color(0xFF6FA3C4), Modifier.weight(1f)) { grade(graph, scope, card, it) { idx++; flipped = false; reviewed++; if (it != Rating.AGAIN) correct++ } }
+                GradeButton(projections, Rating.AGAIN, "Again", x.cinnabar, Modifier.weight(1f)) { onGrade(it) }
+                GradeButton(projections, Rating.HARD, "Hard", x.gold, Modifier.weight(1f)) { onGrade(it) }
+                GradeButton(projections, Rating.GOOD, "Good", x.jade, Modifier.weight(1f)) { onGrade(it) }
+                GradeButton(projections, Rating.EASY, "Easy", Color(0xFF6FA3C4), Modifier.weight(1f)) { onGrade(it) }
             }
         } else {
             Spacer(Modifier.height(58.dp))
@@ -162,32 +197,9 @@ private fun GradeButton(projections: List<GradeProjection>, rating: Rating, labe
     }
 }
 
-private fun grade(graph: AppGraph, scope: kotlinx.coroutines.CoroutineScope,
-                  card: CardEntity, rating: Rating, after: () -> Unit) {
-    scope.launch { graph.cards.grade(card, rating) }
-    after()
-}
-
 /**
  * Reduce a full dictionary gloss to its core senses so the review card is recallable at a glance.
- * CC-CEDICT / HSK glosses cram many senses ("aim, goal; of; possessive particle; …") which makes
- * recognition harder — the character screen ("study character") still shows the full definition.
+ * Shared logic lives in [Gloss]: metadata senses ("surname Huan", "variant of …") never lead, and
+ * the character screen ("study character") still shows the full definition.
  */
-private fun coreGloss(raw: String): String {
-    val cleaned = raw.trim()
-    if (cleaned.isEmpty()) return cleaned
-    val senses = cleaned.split('/', ';', '；', '|')
-        .map { it.trim().trim(',', '，').trim() }
-        .filter { it.isNotEmpty() }
-        .filterNot {
-            val l = it.lowercase()
-            l.startsWith("cl:") || l.startsWith("taiwan pr") || l.startsWith("also pr") ||
-                l.startsWith("variant of") || l.startsWith("old variant") || l.startsWith("see ")
-        }
-    if (senses.isEmpty()) return cleaned
-    // keep the first two senses, each trimmed to its first few comma-listed synonyms
-    val core = senses.take(2).joinToString("; ") { sense ->
-        sense.split(',', '，').map { it.trim() }.filter { it.isNotEmpty() }.take(3).joinToString(", ")
-    }
-    return core.ifEmpty { cleaned }
-}
+private fun coreGloss(raw: String): String = if (raw.isBlank()) raw else Gloss.core(raw)

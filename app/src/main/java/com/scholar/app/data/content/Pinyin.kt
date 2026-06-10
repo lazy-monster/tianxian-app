@@ -12,6 +12,11 @@ object Pinyin {
     fun toned(numeric: String): String =
         numeric.trim().split(' ').joinToString("") { tonedSyllable(it) }
 
+    /** Toned syllables of a numeric pinyin string, one entry per syllable
+        ("huan2 gei3" → ["huán","gěi"]) — for aligning a word's syllables to its characters. */
+    fun tonedSyllables(numeric: String): List<String> =
+        numeric.trim().split(' ').filter { it.isNotBlank() }.map { tonedSyllable(it) }
+
     private fun tonedSyllable(raw: String): String {
         if (raw.isEmpty()) return raw
         var s = raw.lowercase().replace("u:", "v").replace("ü", "v")

@@ -18,24 +18,31 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.scholar.app.data.content.DictEntry
+import com.scholar.app.data.content.Gloss
 import com.scholar.app.di.AppGraph
+import com.scholar.app.srs.CardType
 import com.scholar.app.ui.theme.SerifSC
 import com.scholar.app.ui.theme.Theme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
 fun DictionaryScreen(graph: AppGraph, onOpenChar: (String) -> Unit) {
     val x = Theme.x
+    val scope = rememberCoroutineScope()
     var query by remember { mutableStateOf("") }
     var results by remember { mutableStateOf<List<DictEntry>>(emptyList()) }
+    var minedSet by remember { mutableStateOf<Set<String>>(emptySet()) }
 
     // debounce search
     LaunchedEffect(query) {
         if (query.isBlank()) { results = emptyList(); return@LaunchedEffect }
         delay(180)
-        results = withContext(Dispatchers.IO) { graph.dictionary.search(query.trim()) }
+        val found = withContext(Dispatchers.IO) { graph.dictionary.search(query.trim()) }
+        minedSet = withContext(Dispatchers.IO) { graph.cards.minedAmong(found.map { it.simplified }) }
+        results = found
     }
 
     Column(Modifier.fillMaxSize().background(x.bg).padding(horizontal = 22.dp)) {
@@ -60,14 +67,24 @@ fun DictionaryScreen(graph: AppGraph, onOpenChar: (String) -> Unit) {
             Text("No matches.", color = x.textSoft, fontSize = 13.sp, modifier = Modifier.padding(8.dp))
         }
         LazyColumn(verticalArrangement = Arrangement.spacedBy(9.dp)) {
-            items(results) { e -> EntryRow(e, graph, onOpenChar) }
+            items(results) { e ->
+                EntryRow(e, graph, onOpenChar, isMined = e.simplified in minedSet, onMine = {
+                    scope.launch {
+                        graph.cards.mine(e.simplified, "${graph.dictionary.toned(e.pinyin)} · ${Gloss.display(e.gloss)}",
+                            if (e.simplified.length == 1) CardType.CHAR_RECOGNITION else CardType.WORD_RECOGNITION,
+                            "dictionary")
+                        minedSet = minedSet + e.simplified
+                    }
+                })
+            }
             item { Spacer(Modifier.height(24.dp)) }
         }
     }
 }
 
 @Composable
-private fun EntryRow(e: DictEntry, graph: AppGraph, onOpenChar: (String) -> Unit) {
+private fun EntryRow(e: DictEntry, graph: AppGraph, onOpenChar: (String) -> Unit,
+                     isMined: Boolean, onMine: () -> Unit) {
     val x = Theme.x
     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(x.surface).padding(14.dp),
         verticalAlignment = Alignment.Top) {
@@ -86,9 +103,18 @@ private fun EntryRow(e: DictEntry, graph: AppGraph, onOpenChar: (String) -> Unit
                     modifier = Modifier.padding(bottom = 3.dp))
             }
             Spacer(Modifier.height(4.dp))
-            Text(e.gloss, color = x.textSoft, fontSize = 14.sp, lineHeight = 20.sp)
+            Text(Gloss.display(e.gloss), color = x.textSoft, fontSize = 14.sp, lineHeight = 20.sp)
         }
-        Text("🔊", fontSize = 22.sp, modifier = Modifier.clickable { graph.speaker.speak(e.simplified) }
-            .padding(start = 8.dp, top = 4.dp))
+        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(start = 8.dp)) {
+            Text("🔊", fontSize = 22.sp, modifier = Modifier.clickable {
+                graph.appScope.launch { graph.speaker.speak(graph.dictionary.audioTextFor(e.simplified, e.pinyin)) }
+            }.padding(top = 4.dp))
+            Spacer(Modifier.height(10.dp))
+            Box(Modifier.clip(RoundedCornerShape(10.dp)).background(if (isMined) x.surface2 else x.cinnabar)
+                .clickable(enabled = !isMined) { onMine() }.padding(horizontal = 11.dp, vertical = 6.dp)) {
+                Text(if (isMined) "✓" else "+", color = if (isMined) x.jade else androidx.compose.ui.graphics.Color.White,
+                    fontWeight = FontWeight.Bold, fontSize = 15.sp)
+            }
+        }
     }
 }

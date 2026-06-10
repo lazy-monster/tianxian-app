@@ -26,8 +26,8 @@ android {
         applicationId = "com.scholar.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 8
-        versionName = "0.8.0"
+        versionCode = 9
+        versionName = "0.9.0"
         vectorDrawables { useSupportLibrary = true }
     }
     signingConfigs {
@@ -47,6 +47,14 @@ android {
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = if (hasReleaseKeystore) signingConfigs.getByName("release")
                 else signingConfigs.getByName("debug")
+        }
+        debug {
+            // Debug builds install as a separate app (com.scholar.app.debug). Debug keystores
+            // differ per machine and per CI runner, so a debug build can never *update* a
+            // release install — without this suffix Android rejects it with "package conflicts
+            // with existing package". Side-by-side install sidesteps the clash entirely.
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
         }
     }
     compileOptions {

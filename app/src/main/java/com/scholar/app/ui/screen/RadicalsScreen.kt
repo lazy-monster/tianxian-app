@@ -14,6 +14,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -28,6 +29,7 @@ import com.scholar.app.data.content.RadicalNames
 import com.scholar.app.di.AppGraph
 import com.scholar.app.ui.theme.SerifSC
 import com.scholar.app.ui.theme.Theme
+import com.scholar.app.ui.theme.promptWash
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -43,7 +45,14 @@ private sealed interface RadMode {
 @Composable
 fun RadicalsScreen(graph: AppGraph, onBack: () -> Unit, onOpenChar: (String) -> Unit) {
     var radicals by remember { mutableStateOf<List<Radical>>(emptyList()) }
-    var mode by remember { mutableStateOf<RadMode>(RadMode.Browse) }
+    // Saveable so a detour to a character page (or rotation) can't kick the user back to Browse.
+    var modeCode by rememberSaveable { mutableStateOf(-1) }   // -1 Browse · -2 Cards · -3 Track · ≥0 Trial(batch)
+    val mode: RadMode = when {
+        modeCode == -2 -> RadMode.Cards
+        modeCode == -3 -> RadMode.Track
+        modeCode >= 0 -> RadMode.Trial(modeCode)
+        else -> RadMode.Browse
+    }
 
     LaunchedEffect(Unit) { radicals = withContext(Dispatchers.IO) { graph.dictionary.radicals() } }
 
@@ -51,19 +60,19 @@ fun RadicalsScreen(graph: AppGraph, onBack: () -> Unit, onOpenChar: (String) -> 
     // Cards → Browse), mirroring the on-screen back chips, instead of popping the whole Learn route.
     when (val m = mode) {
         RadMode.Browse -> RadicalsList(graph, radicals, onBack, onOpenChar,
-            onFlashcards = { mode = RadMode.Cards }, onTrack = { mode = RadMode.Track })
+            onFlashcards = { modeCode = -2 }, onTrack = { modeCode = -3 })
         RadMode.Cards -> {
-            BackHandler { mode = RadMode.Browse }
-            RadicalFlashcards(graph, radicals, onExit = { mode = RadMode.Browse })
+            BackHandler { modeCode = -1 }
+            RadicalFlashcards(graph, radicals, onExit = { modeCode = -1 })
         }
         RadMode.Track -> {
-            BackHandler { mode = RadMode.Browse }
+            BackHandler { modeCode = -1 }
             RadicalTrackScreen(graph, radicals,
-                onExit = { mode = RadMode.Browse }, onTrial = { b -> mode = RadMode.Trial(b) })
+                onExit = { modeCode = -1 }, onTrial = { b -> modeCode = b })
         }
         is RadMode.Trial -> {
-            BackHandler { mode = RadMode.Track }
-            RadicalTrial(graph, radicals, m.batch, onExit = { mode = RadMode.Track })
+            BackHandler { modeCode = -3 }
+            RadicalTrial(graph, radicals, m.batch, onExit = { modeCode = -3 })
         }
     }
 }
@@ -89,7 +98,7 @@ private fun RadicalsList(
     onBack: () -> Unit, onOpenChar: (String) -> Unit, onFlashcards: () -> Unit, onTrack: () -> Unit,
 ) {
     val x = Theme.x
-    var expanded by remember { mutableStateOf<Int?>(null) }
+    var expanded by rememberSaveable { mutableStateOf<Int?>(null) }   // survives a char-page detour
     val examples = remember { mutableStateMapOf<String, List<CharInfo>>() }
 
     LazyColumn(Modifier.fillMaxSize().background(x.bg).padding(horizontal = 22.dp),
@@ -180,10 +189,18 @@ private fun RadicalsList(
 @Composable
 private fun RadicalFlashcards(graph: AppGraph, radicals: List<Radical>, onExit: () -> Unit) {
     val x = Theme.x
-    var queue by remember(radicals) { mutableStateOf(radicals.shuffled()) }
-    var pos by remember { mutableStateOf(0) }
-    var flipped by remember { mutableStateOf(false) }
-    var learned by remember { mutableStateOf(0) }
+    // Saveable round state: the deck order is rebuilt from a saved seed, and "study again"
+    // re-queues are kept by radical number — so rotation mid-round resumes in place.
+    var round by rememberSaveable { mutableStateOf(0) }
+    val seed = rememberSaveable(round) { kotlin.random.Random.nextLong() }
+    var againNumbers by rememberSaveable(round) { mutableStateOf(intArrayOf()) }
+    var pos by rememberSaveable(round) { mutableStateOf(0) }
+    var flipped by rememberSaveable { mutableStateOf(false) }
+    var learned by rememberSaveable(round) { mutableStateOf(0) }
+    val queue = remember(radicals, seed, againNumbers) {
+        val byNumber = radicals.associateBy { it.number }
+        radicals.shuffled(kotlin.random.Random(seed)) + againNumbers.mapNotNull { byNumber[it] }
+    }
 
     val card = queue.getOrNull(pos)
     Column(Modifier.fillMaxSize().background(x.bg).padding(22.dp)) {
@@ -211,9 +228,7 @@ private fun RadicalFlashcards(graph: AppGraph, radicals: List<Radical>, onExit: 
                     Text("Studied $learned radicals this round.", color = x.textSoft, fontSize = 14.sp)
                     Spacer(Modifier.height(20.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        FlashButton("↻ Again", x.surface, x.text, Modifier) {
-                            queue = radicals.shuffled(); pos = 0; flipped = false; learned = 0
-                        }
+                        FlashButton("↻ Again", x.surface, x.text, Modifier) { round++; flipped = false }
                         FlashButton("Done", x.cinnabar, Color.White, Modifier) { onExit() }
                     }
                 }
@@ -224,7 +239,8 @@ private fun RadicalFlashcards(graph: AppGraph, radicals: List<Radical>, onExit: 
         val common = RadicalNames.forNumber(card.number)
         val cardScroll = rememberScrollState()
         LaunchedEffect(card.number, flipped) { cardScroll.scrollTo(0) }
-        Box(Modifier.weight(1f).fillMaxWidth().clip(RoundedCornerShape(26.dp)).background(x.surface2)
+        Box(Modifier.weight(1f).fillMaxWidth().clip(RoundedCornerShape(26.dp))
+            .background(x.promptWash(if (flipped) x.jade else x.gold))
             .clickable { flipped = true }, contentAlignment = Alignment.Center) {
             Column(Modifier.verticalScroll(cardScroll).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(card.radical, fontFamily = SerifSC, fontWeight = FontWeight.SemiBold, fontSize = 96.sp, color = x.text)
@@ -251,7 +267,7 @@ private fun RadicalFlashcards(graph: AppGraph, radicals: List<Radical>, onExit: 
         if (flipped) {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 FlashButton("Study again", x.surface, x.gold, Modifier.weight(1f)) {
-                    queue = queue + card; pos++; flipped = false
+                    againNumbers += card.number; pos++; flipped = false
                 }
                 FlashButton("Got it", x.jade, Color.White, Modifier.weight(1f)) {
                     pos++; flipped = false; learned++
@@ -342,28 +358,44 @@ private data class RQuestion(val prompt: Radical, val kind: RKind, val options: 
 private fun readingLabel(r: Radical): String =
     RadicalNames.forNumber(r.number)?.let { "${it.name} ${it.pinyin}" } ?: r.pinyin
 
-/** Three distinct wrong options for [r], projected through [field] (meaning, glyph, or reading). */
-private fun radDistractors(all: List<Radical>, r: Radical, field: (Radical) -> String): List<String> {
+/** What the TTS would *pronounce* for a radical, normalised — used to keep homophones of the
+    prompt out of sound-question options. */
+private fun spokenKey(r: Radical): String =
+    (RadicalNames.forNumber(r.number)?.pinyin ?: r.pinyin).lowercase().replace(" ", "")
+
+/** Three wrong options for [r] via [field]. [conflict] keys out candidates that would also be a
+    correct answer (same sound on a sound question, same meaning on a meaning question). */
+private fun radDistractors(all: List<Radical>, r: Radical, rng: kotlin.random.Random,
+                           conflict: ((Radical) -> String)? = null,
+                           field: (Radical) -> String): List<String> {
     val correct = field(r)
-    return all.asSequence().filter { it.number != r.number }.map(field)
-        .filter { it.isNotBlank() }.distinct().filter { it != correct }.toList().shuffled().take(3)
+    val clash = conflict?.invoke(r)
+    return all.asSequence().filter { it.number != r.number }
+        .filter { conflict == null || conflict(it) != clash }
+        .map(field).filter { it.isNotBlank() }.distinct().filter { it != correct }
+        .toList().shuffled(rng).take(3)
 }
 
 /** Every radical is tested in all four directions — shape→meaning, meaning→shape, sound→shape and
-    shape→reading — so one trial drills recognition, recall and pronunciation together. */
-private fun buildTrial(batch: List<Radical>, all: List<Radical>): List<RQuestion> =
+    shape→reading — so one trial drills recognition, recall and pronunciation together.
+    Deterministic for a given [rng] seed so an interrupted trial restores the same questions. */
+private fun buildTrial(batch: List<Radical>, all: List<Radical>, rng: kotlin.random.Random): List<RQuestion> =
     batch.flatMap { r ->
         listOf(
             RQuestion(r, RKind.GLYPH_TO_MEANING,
-                (radDistractors(all, r) { shortMeaning(it) } + shortMeaning(r)).shuffled(), shortMeaning(r)),
+                (radDistractors(all, r, rng) { shortMeaning(it) } + shortMeaning(r)).shuffled(rng), shortMeaning(r)),
+            // "which radical means X" must not offer two radicals that both mean X
             RQuestion(r, RKind.MEANING_TO_GLYPH,
-                (radDistractors(all, r) { it.radical } + r.radical).shuffled(), r.radical),
+                (radDistractors(all, r, rng, conflict = { shortMeaning(it) }) { it.radical } + r.radical)
+                    .shuffled(rng), r.radical),
+            // hearing the name must not offer a same-sounding radical as a "wrong" option
             RQuestion(r, RKind.SOUND_TO_GLYPH,
-                (radDistractors(all, r) { it.radical } + r.radical).shuffled(), r.radical),
+                (radDistractors(all, r, rng, conflict = { spokenKey(it) }) { it.radical } + r.radical)
+                    .shuffled(rng), r.radical),
             RQuestion(r, RKind.GLYPH_TO_SOUND,
-                (radDistractors(all, r) { readingLabel(it) } + readingLabel(r)).shuffled(), readingLabel(r)),
+                (radDistractors(all, r, rng) { readingLabel(it) } + readingLabel(r)).shuffled(rng), readingLabel(r)),
         )
-    }.shuffled()
+    }.shuffled(rng)
 
 @Composable
 private fun RadicalTrial(graph: AppGraph, radicals: List<Radical>, batchIndex: Int, onExit: () -> Unit) {
@@ -379,14 +411,17 @@ private fun RadicalTrial(graph: AppGraph, radicals: List<Radical>, batchIndex: I
         return
     }
 
-    var attempt by remember { mutableStateOf(0) }
-    val questions = remember(batchIndex, attempt) { buildTrial(batch, radicals) }
-    var qIdx by remember(attempt) { mutableStateOf(0) }
-    var selected by remember(attempt) { mutableStateOf<String?>(null) }
-    var score by remember(attempt) { mutableStateOf(0) }
-    var finished by remember(attempt) { mutableStateOf(false) }
-    var finishedPct by remember(attempt) { mutableStateOf(0) }
-    var brokeThrough by remember(attempt) { mutableStateOf(false) }
+    // Saveable + seeded: an interrupted trial (rotation, process death) resumes on the same
+    // question with the same score instead of silently restarting.
+    var attempt by rememberSaveable { mutableStateOf(0) }
+    val seed = rememberSaveable(batchIndex, attempt) { kotlin.random.Random.nextLong() }
+    val questions = remember(seed) { buildTrial(batch, radicals, kotlin.random.Random(seed)) }
+    var qIdx by rememberSaveable(attempt) { mutableStateOf(0) }
+    var selected by rememberSaveable(attempt) { mutableStateOf<String?>(null) }
+    var score by rememberSaveable(attempt) { mutableStateOf(0) }
+    var finished by rememberSaveable(attempt) { mutableStateOf(false) }
+    var finishedPct by rememberSaveable(attempt) { mutableStateOf(0) }
+    var brokeThrough by rememberSaveable(attempt) { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize().background(x.bg).padding(22.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -440,7 +475,7 @@ private fun RadicalTrial(graph: AppGraph, radicals: List<Radical>, batchIndex: I
         }
         // prompt + options scroll if they don't fit, so the Next button is always reachable
         Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(optScroll)) {
-        Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(x.surface2).padding(vertical = 28.dp),
+        Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(x.promptWash(x.gold)).padding(vertical = 28.dp),
             contentAlignment = Alignment.Center) {
             when (q.kind) {
                 RKind.GLYPH_TO_MEANING ->

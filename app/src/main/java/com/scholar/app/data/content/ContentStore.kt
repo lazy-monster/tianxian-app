@@ -47,6 +47,21 @@ class ContentStore private constructor(
             "WHERE simplified=? ORDER BY freq_rank IS NULL, freq_rank LIMIT 1", arrayOf(word)
     ).use { if (it.moveToFirst()) it.toEntry() else null }
 
+    /** Each dictionary reading of a single character (numeric pinyin), most common sense first —
+        used to detect polyphones (多音字) for pronunciation-safe audio. */
+    fun readingsOf(ch: String): List<String> = db.rawQuery(
+        "SELECT pinyin FROM dict_entry WHERE simplified=? ORDER BY freq_rank IS NULL, freq_rank",
+        arrayOf(ch)
+    ).use { c -> buildList { while (c.moveToNext()) c.getString(0)?.let { add(it) } } }
+
+    /** Frequent two-character words containing [ch] — carrier candidates so a secondary reading
+        can be *heard* (the TTS reads a lone polyphone with its default reading only). */
+    fun wordsContaining(ch: String, limit: Int = 30): List<DictEntry> = db.rawQuery(
+        "SELECT simplified,traditional,pinyin,gloss,freq_rank FROM dict_entry " +
+            "WHERE simplified LIKE ? AND length(simplified)=2 AND freq_rank IS NOT NULL " +
+            "ORDER BY freq_rank LIMIT ?", arrayOf("%$ch%", limit.toString())
+    ).use { c -> buildList { while (c.moveToNext()) add(c.toEntry()) } }
+
     /** Crash-proof search across hanzi (prefix), pinyin, and English (FTS). */
     fun search(query: String, limit: Int = 40): List<DictEntry> = runCatching {
         val q = query.trim()

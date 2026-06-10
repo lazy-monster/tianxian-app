@@ -56,7 +56,7 @@ class Fsrs6(
 
     /** Format a raw interval in days as a compact Anki-style label ("10m", "3d", "2mo"). */
     fun formatDays(d: Double): String = when {
-        d < 1.0 / 24 -> "<1m"
+        d < 1.0 / 24 -> "${(d * 1440).toInt().coerceAtLeast(1)}m"
         d < 1.0 -> "${(d * 24).toInt().coerceAtLeast(1)}h"
         d < 30 -> "${d.toInt().coerceAtLeast(1)}d"
         d < 365 -> "${(d / 30).toInt()}mo"

@@ -21,6 +21,8 @@ import com.scholar.app.data.user.BookEntity
 import com.scholar.app.di.AppGraph
 import com.scholar.app.ui.theme.SerifSC
 import com.scholar.app.ui.theme.Theme
+import com.scholar.app.ui.theme.accentWash
+import com.scholar.app.ui.theme.heroWash
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -35,6 +37,8 @@ fun TodayScreen(graph: AppGraph, onOpenReview: () -> Unit, onOpenLibrary: () -> 
     var reroll by remember { mutableStateOf(0) }
     var moment by remember { mutableStateOf<CharInfo?>(null) }
     LaunchedEffect(reroll) { moment = withContext(Dispatchers.IO) { graph.dictionary.randomCharacter() } }
+    // keep the library rows' "X% readable" in step with what the user knows (throttled internally)
+    LaunchedEffect(Unit) { graph.books.refreshCoverage() }
     val due by graph.cards.dueCountFlow().collectAsStateWithLifecycle(0)
     val mastered by graph.cards.masteredCountFlow().collectAsStateWithLifecycle(0)
     val studyTick by graph.settings.studyTick.collectAsStateWithLifecycle(0)
@@ -54,9 +58,9 @@ fun TodayScreen(graph: AppGraph, onOpenReview: () -> Unit, onOpenLibrary: () -> 
                 Text("⚙", color = x.textSoft, fontSize = 20.sp, modifier = Modifier.clickable { onOpenSettings() })
             }
             Spacer(Modifier.height(8.dp))
-            // hero
+            // hero — gold-to-cinnabar wash so the centrepiece glows instead of sitting flat
             Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(26.dp))
-                .background(x.surface2).padding(24.dp)) {
+                .background(x.heroWash()).padding(24.dp)) {
                 Text("CHARACTERS KNOWN", color = x.textSoft, fontSize = 12.sp, letterSpacing = 2.sp)
                 Text("$known", fontFamily = SerifSC, fontWeight = FontWeight.SemiBold,
                     fontSize = 72.sp, color = x.gold)
@@ -98,7 +102,7 @@ fun TodayScreen(graph: AppGraph, onOpenReview: () -> Unit, onOpenLibrary: () -> 
                         Text("CHARACTER OF THE MOMENT", color = x.textFaint, fontSize = 10.sp, letterSpacing = 2.sp)
                         Spacer(Modifier.height(2.dp))
                         Text(ci.pinyin.ifBlank { "—" }, color = x.text, fontWeight = FontWeight.Medium, fontSize = 15.sp)
-                        Text(ci.definition.substringBefore(",").substringBefore("/").trim().take(40),
+                        Text(com.scholar.app.data.content.Gloss.primary(ci.definition),
                             color = x.textSoft, fontSize = 12.sp, maxLines = 1)
                     }
                     Text("↻", color = x.textFaint, fontSize = 20.sp)
@@ -144,7 +148,8 @@ fun TodayScreen(graph: AppGraph, onOpenReview: () -> Unit, onOpenLibrary: () -> 
 private fun StatCard(label: String, value: String, unit: String, accent: androidx.compose.ui.graphics.Color,
                      modifier: Modifier, onClick: () -> Unit) {
     val x = Theme.x
-    Column(modifier.clip(RoundedCornerShape(20.dp)).background(x.surface).clickable { onClick() }.padding(16.dp)) {
+    Column(modifier.clip(RoundedCornerShape(20.dp)).background(x.accentWash(accent))
+        .clickable { onClick() }.padding(16.dp)) {
         Text(label, color = x.textSoft, fontSize = 12.sp)
         Spacer(Modifier.height(8.dp))
         Row(verticalAlignment = Alignment.Bottom) {
@@ -156,7 +161,7 @@ private fun StatCard(label: String, value: String, unit: String, accent: android
 }
 
 @Composable
-fun BookRow(b: BookEntity, onClick: () -> Unit) {
+fun BookRow(b: BookEntity, onDelete: (() -> Unit)? = null, onClick: () -> Unit) {
     val x = Theme.x
     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(x.surface)
         .clickable { onClick() }.padding(13.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -176,6 +181,11 @@ fun BookRow(b: BookEntity, onClick: () -> Unit) {
             }
             Text("${(b.coverage * 100).toInt()}% readable for you", color = x.textSoft, fontSize = 11.sp,
                 modifier = Modifier.padding(top = 5.dp))
+        }
+        if (onDelete != null) {
+            Spacer(Modifier.width(6.dp))
+            Text("✕", color = x.textFaint, fontSize = 16.sp,
+                modifier = Modifier.clip(RoundedCornerShape(12.dp)).clickable { onDelete() }.padding(10.dp))
         }
     }
 }

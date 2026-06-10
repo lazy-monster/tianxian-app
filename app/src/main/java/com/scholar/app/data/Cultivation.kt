@@ -46,9 +46,14 @@ object Cultivation {
     private val QI_LAYERS = listOf(0, 10, 24, 42, 65, 92, 122, 150, 165)   // entry score for Qi Refining layers 1..9
     private val SUBSTAGES = listOf("Early Stage", "Middle Stage", "Late Stage", "Great Perfection")
 
+    // Blend weights (also shown on the Cultivation screen's contribution breakdown).
+    const val W_KNOWN = 0.3
+    const val W_RADICALS = 0.4
+    const val W_TRACK = 0.2
+
     /** 修为. Durable mastery is the spine (×1.0); recognition, foundation and fresh study credit add less. */
     fun score(known: Int, mastered: Int, radicalsCultivated: Int, trackWords: Int): Int =
-        (mastered + 0.3 * known + 0.4 * radicalsCultivated + 0.2 * trackWords).toInt()
+        (mastered + W_KNOWN * known + W_RADICALS * radicalsCultivated + W_TRACK * trackWords).toInt()
 
     data class Rank(
         val realm: Realm,
