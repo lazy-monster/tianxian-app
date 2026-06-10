@@ -141,10 +141,43 @@ class ContentStore private constructor(
     ).use { c -> buildList { while (c.moveToNext()) add(Radical(c.getInt(0), c.getString(1), c.getString(2), c.getString(3))) } }
 
     // ── HSK leveled vocabulary ──────────────────────────────────────────
+    // Some hsk_word rows carry only a cross-reference gloss — the source picked the wrong
+    // polyphone reading, e.g. 都 → "surname Du" instead of "all; entirely". When a row has no
+    // learnable sense, fall back to the merged dictionary gloss (all readings); failing that, to
+    // the gloss of the word it points at ("variant of 火爆" → 火爆's gloss). See Gloss.hasRealSense.
     fun hskWords(levelKey: String, limit: Int = 200): List<HskWord> = db.rawQuery(
-        "SELECT word,pinyin,meaning,level FROM hsk_word WHERE level LIKE ? " +
-            "ORDER BY freq_rank IS NULL, freq_rank LIMIT ?", arrayOf("%$levelKey%", limit.toString())
-    ).use { c -> buildList { while (c.moveToNext()) add(HskWord(c.getString(0), c.getString(1) ?: "", c.getString(2) ?: "", c.getString(3) ?: "")) } }
+        "SELECT h.word, h.pinyin, h.meaning, h.level, " +
+            "(SELECT group_concat(d.gloss, ' / ') FROM dict_entry d WHERE d.simplified=h.word) AS dict_gloss " +
+            "FROM hsk_word h WHERE h.level LIKE ? " +
+            "ORDER BY h.freq_rank IS NULL, h.freq_rank LIMIT ?", arrayOf("%$levelKey%", limit.toString())
+    ).use { c ->
+        buildList {
+            while (c.moveToNext()) {
+                val word = c.getString(0)
+                val raw = c.getString(2) ?: ""
+                add(HskWord(word, c.getString(1) ?: "",
+                    bestMeaning(word, raw, c.getString(4)), c.getString(3) ?: ""))
+            }
+        }
+    }
+
+    /** Pick the most learnable gloss for an HSK entry whose own [raw] meaning may be cross-ref
+        noise: keep it if it has a real sense, else the word's [merged] dictionary gloss, else the
+        gloss of the word it cross-references. Falls back to [raw] if nothing better turns up. */
+    private fun bestMeaning(word: String, raw: String, merged: String?): String {
+        if (Gloss.hasRealSense(raw)) return raw
+        val m = merged?.takeIf { it.isNotBlank() } ?: ""
+        if (Gloss.hasRealSense(m)) return m
+        Gloss.crossRefTarget(m.ifBlank { raw })?.let { target ->
+            mergedGloss(target).takeIf { Gloss.hasRealSense(it) }?.let { return it }
+        }
+        return raw
+    }
+
+    /** All dictionary readings of [word] joined into one gloss string. */
+    private fun mergedGloss(word: String): String = db.rawQuery(
+        "SELECT group_concat(gloss, ' / ') FROM dict_entry WHERE simplified=?", arrayOf(word)
+    ).use { if (it.moveToFirst()) it.getString(0) ?: "" else "" }
 
     // ── genre module ────────────────────────────────────────────────────
     fun genreTerms(): List<GenreTerm> = db.rawQuery(
