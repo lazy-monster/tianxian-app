@@ -197,9 +197,10 @@ private fun RadicalFlashcards(graph: AppGraph, radicals: List<Radical>, onExit: 
     var pos by rememberSaveable(round) { mutableStateOf(0) }
     var flipped by rememberSaveable { mutableStateOf(false) }
     var learned by rememberSaveable(round) { mutableStateOf(0) }
-    val queue = remember(radicals, seed, againNumbers) {
+    val queue: List<Radical> = remember(radicals, seed, againNumbers) {
         val byNumber = radicals.associateBy { it.number }
-        radicals.shuffled(kotlin.random.Random(seed)) + againNumbers.mapNotNull { byNumber[it] }
+        // IntArray has no mapNotNull — go through a List for the lookup
+        radicals.shuffled(kotlin.random.Random(seed)) + againNumbers.toList().mapNotNull { byNumber[it] }
     }
 
     val card = queue.getOrNull(pos)
