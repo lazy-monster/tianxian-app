@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.scholar.app.data.Cultivation
 import com.scholar.app.data.content.GenreTerm
+import com.scholar.app.data.content.Gloss
 import com.scholar.app.di.AppGraph
 import com.scholar.app.srs.CardType
 import com.scholar.app.ui.theme.Brush
@@ -161,7 +162,7 @@ fun CultivationScreen(graph: AppGraph, onBack: () -> Unit, onOpenChar: (String) 
                             graph.speaker.speak(graph.dictionary.audioTextFor(tw.t.word, tw.t.pinyin)) } },
                         onMine = {
                             scope.launch {
-                                graph.cards.mine(tw.t.word, "${tw.t.pinyin} · ${tw.t.gloss}", CardType.WORD_RECOGNITION, "Genre: $key")
+                                graph.cards.mine(tw.t.word, "${tw.t.pinyin} · ${Gloss.display(tw.t.gloss)}", CardType.WORD_RECOGNITION, "Genre: $key")
                                 minedSet = minedSet + tw.t.word
                             }
                         })
@@ -228,7 +229,7 @@ private fun TermRow(t: GenreTerm, isMined: Boolean, onOpenChar: (String) -> Unit
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
             Text(t.pinyin, color = x.gold, fontSize = 14.sp)
-            Text(t.gloss, color = x.textSoft, fontSize = 13.sp, lineHeight = 18.sp)
+            Text(Gloss.display(t.gloss), color = x.textSoft, fontSize = 13.sp, lineHeight = 18.sp)
         }
         Text(if (isMined) "✓" else "+", color = if (isMined) x.textFaint else x.jade,
             fontSize = if (isMined) 16.sp else 22.sp, fontWeight = FontWeight.Bold,

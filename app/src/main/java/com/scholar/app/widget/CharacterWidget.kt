@@ -30,6 +30,7 @@ import androidx.glance.unit.ColorProvider
 import com.scholar.app.MainActivity
 import com.scholar.app.data.SettingsStore
 import com.scholar.app.data.content.ContentStore
+import com.scholar.app.data.content.Gloss
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -40,7 +41,7 @@ class CharacterWidget : GlanceAppWidget() {
         val ci = withContext(Dispatchers.IO) { runCatching { ContentStore.get(context).randomCharacter() }.getOrNull() }
         val ch = ci?.char ?: "学"
         val pinyin = ci?.pinyin.orEmpty()
-        val gloss = ci?.definition.orEmpty().substringBefore(",").substringBefore("/").trim().take(30)
+        val gloss = Gloss.primary(ci?.definition.orEmpty(), 30)
         val x = resolveWidgetColors(SettingsStore(context))
         provideContent {
             Column(

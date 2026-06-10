@@ -61,7 +61,9 @@ object Gloss {
 
     /** One or two core senses for a flashcard back — recallable at a glance. */
     fun core(raw: String): String {
-        val real = ordered(raw)
+        // Only genuine meanings — never "surname …" / "variant of …" — unless metadata is all the
+        // entry has (e.g. a pure surname character), in which case show that rather than nothing.
+        val real = senses(raw).filterNot { isMeta(it) }.ifEmpty { ordered(raw) }
         if (real.isEmpty()) return raw
         val core = real.take(2).joinToString("; ") { sense ->
             stripAnnotation(sense).split(',', '，').map { it.trim() }

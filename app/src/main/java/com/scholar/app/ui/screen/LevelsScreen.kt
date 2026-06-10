@@ -106,7 +106,7 @@ private fun LevelsBrowse(
     }
 
     suspend fun add(word: HskWord) {
-        graph.cards.mine(word.word, "${word.pinyin} · ${word.meaning}",
+        graph.cards.mine(word.word, "${word.pinyin} · ${Gloss.display(word.meaning)}",
             if (word.word.length == 1) CardType.CHAR_RECOGNITION else CardType.WORD_RECOGNITION, "HSK $level")
         mined[word.word] = true
     }
@@ -182,7 +182,7 @@ private fun LevelsBrowse(
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text(w.pinyin, color = x.gold, fontSize = 14.sp)
-                    Text(w.meaning, color = x.textSoft, fontSize = 13.sp, lineHeight = 18.sp, maxLines = 2)
+                    Text(Gloss.display(w.meaning), color = x.textSoft, fontSize = 13.sp, lineHeight = 18.sp, maxLines = 2)
                 }
                 Box(Modifier.clip(RoundedCornerShape(10.dp)).background(if (isMined) x.surface2 else x.cinnabar)
                     .clickable(enabled = !isMined) { scope.launch { add(w) } }
@@ -325,7 +325,7 @@ private fun CharacterLearn(
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text(w.pinyin, color = x.gold, fontSize = 14.sp)
-                    Text(w.meaning, color = x.textSoft, fontSize = 13.sp, lineHeight = 18.sp, maxLines = 2)
+                    Text(Gloss.display(w.meaning), color = x.textSoft, fontSize = 13.sp, lineHeight = 18.sp, maxLines = 2)
                 }
             }
         }
@@ -534,7 +534,7 @@ private fun CharacterTrial(
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
                         Text(q.word.pinyin, color = x.text, fontSize = 15.sp, fontWeight = FontWeight.Medium)
-                        Text(q.word.meaning, color = x.textSoft, fontSize = 12.sp, lineHeight = 16.sp, maxLines = 2)
+                        Text(Gloss.display(q.word.meaning), color = x.textSoft, fontSize = 12.sp, lineHeight = 16.sp, maxLines = 2)
                     }
                     Text("🔊", fontSize = 22.sp, modifier = Modifier.clickable { speakWord(graph, q.word.word, q.word.pinyin) })
                 }
@@ -556,7 +556,7 @@ private fun CharacterTrial(
                         // the inserts complete even if the user leaves the result screen immediately.
                         graph.appScope.launch {
                             group.forEach { w ->
-                                graph.cards.mine(w.word, "${w.pinyin} · ${w.meaning}",
+                                graph.cards.mine(w.word, "${w.pinyin} · ${Gloss.display(w.meaning)}",
                                     if (w.word.length == 1) CardType.CHAR_RECOGNITION else CardType.WORD_RECOGNITION,
                                     "HSK $level")
                             }
