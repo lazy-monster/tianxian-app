@@ -1,18 +1,31 @@
 # Development guide
 
-Everything for building, releasing, and working on Scholar. Users don't need any of this —
-see the [README](../README.md).
+Everything for building, releasing, and working on Tianxian (天仙) and its Japanese twin
+Tensen. Users don't need any of this — see the [README](../README.md).
+
+## Modules
+
+One codebase ships two apps from a shared library:
+
+| Module | Type | What it holds |
+|---|---|---|
+| `:core` | Android library (`com.tianxian.core`) | All logic and UI: SRS, reader, dictionary, screens, theming, widgets, backup, updater. Carries no app name or release repo. |
+| `:app-zh` | Application (`com.tianxian.app`) | **Tianxian** — the Chinese app. Identity (`AppConfig`), launcher branding, bundled Chinese `content.db`. |
+| `:app-ja` | Application (`com.tensen.app`) | **Tensen** — the Japanese app. Same `:core`; ships a *stub* `content.db` until the Japanese data + language layer land (see "Japanese, in progress"). |
+
+Per-app differences flow through `core/.../di/AppConfig.kt`, built in each module's
+`Application` (`TianxianApp` / `TensenApp`).
 
 ## Tech stack
 
 | Layer | Choice |
 |---|---|
 | Language / UI | Kotlin 2.0 · Jetpack Compose (Material 3) |
-| Architecture | Single activity · Compose Navigation · manual DI |
+| Architecture | `:core` library + two app shells · single activity · Compose Navigation · manual DI |
 | Storage | Room (your progress) + bundled read-only SQLite (content) |
 | SRS | Native FSRS-6 |
 | Ebooks | Native EPUB/TXT/MOBI parsers · PDFBox-Android · ML Kit OCR |
-| Audio | On-device Chinese text-to-speech |
+| Audio | On-device text-to-speech |
 | Widgets / reminders | Jetpack Glance · WorkManager |
 | Min / target SDK | 26 / 35 |
 
@@ -22,8 +35,8 @@ You need **JDK 17** and the **Android SDK** (via Android Studio or the command-l
 
 ### Android Studio (simplest)
 
-Open the project folder, let Gradle sync, and press **Run**. Android Studio provides the
-SDK and generates the Gradle wrapper automatically.
+Open the project folder, let Gradle sync, and run the **app-zh** (or **app-ja**) configuration.
+Android Studio provides the SDK and generates the Gradle wrapper automatically.
 
 ### Command line
 
@@ -33,13 +46,14 @@ export ANDROID_HOME=$HOME/android-sdk
 sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
 echo "sdk.dir=$ANDROID_HOME" > local.properties
-gradle wrapper            # generate the wrapper (jar is not committed)
-./gradlew assembleDebug
+gradle wrapper                 # generate the wrapper (jar is not committed)
+./gradlew :app-zh:assembleDebug    # Tianxian
+./gradlew :app-ja:assembleDebug    # Tensen (stub content)
 ```
 
-The APK is written to `app/build/outputs/apk/debug/app-debug.apk`. Debug builds install
-**side-by-side** with the release app (as `com.scholar.app.debug`), so testing never clobbers
-a real install.
+The Tianxian APK is written to `app-zh/build/outputs/apk/debug/app-zh-debug.apk`. Debug builds
+install **side-by-side** with the release app (as `com.tianxian.app.debug`), so testing never
+clobbers a real install.
 
 ## Release build (signed APK)
 
@@ -47,7 +61,7 @@ A *release* APK is what users install. It needs a signing key — create one onc
 
 ```bash
 keytool -genkey -v -keystore release.jks -keyalg RSA -keysize 2048 \
-        -validity 10000 -alias scholar
+        -validity 10000 -alias tianxian
 ```
 
 Keep `release.jks` **private and backed up** (it's git-ignored). Android only accepts updates
@@ -59,12 +73,12 @@ uninstall/reinstall; leak it and anyone can sign a malicious "update". Then eith
   ```properties
   storeFile=release.jks
   storePassword=…
-  keyAlias=scholar
+  keyAlias=tianxian
   keyPassword=…
   ```
 
-  and run `./gradlew assembleRelease`. The signed APK lands in
-  `app/build/outputs/apk/release/app-release.apk`.
+  and run `./gradlew :app-zh:assembleRelease`. The signed APK lands in
+  `app-zh/build/outputs/apk/release/app-zh-release.apk`.
 
 - **In CI** — set four repository **Secrets** (Settings → Secrets and variables → Actions):
   `KEYSTORE_BASE64` (`base64 -w0 release.jks`), `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`.
@@ -78,29 +92,34 @@ uninstall/reinstall; leak it and anyone can sign a malicious "update". Then eith
 > or the matching `KEYSTORE_FILE` / `KEYSTORE_PASSWORD` / `KEY_ALIAS` / `KEY_PASSWORD`
 > environment variables.
 
+> **Rebrand note:** Tianxian uses a new `applicationId` (`com.tianxian.app`). Android treats it
+> as a different app from the old `com.scholar.app`, so existing installs can't auto-update to it —
+> users migrate with a one-time manual install. Their backups still restore: import accepts the
+> legacy `"scholar"` id (see `AppConfig.acceptedBackupIds`).
+
 ## Cutting a release
 
-Bump `versionCode`/`versionName` in `app/build.gradle.kts`, then tag and push:
+Bump `versionCode`/`versionName` in `app-zh/build.gradle.kts`, then tag and push:
 
 ```bash
-git tag v0.9.0 && git push origin v0.9.0
+git tag v0.11.0 && git push origin v0.11.0
 ```
 
-`.github/workflows/release.yml` builds the signed release APK and publishes it as a GitHub
-**Release** named after the tag, with auto-generated notes, so the repo's Download link always
-points at the newest build.
+`.github/workflows/release.yml` builds the signed `:app-zh` release APK and publishes it as a
+GitHub **Release** named after the tag. The in-app updater's release channel is set per app in
+`AppConfig.updateRepo`.
 
 ## Continuous integration
 
-- `.github/workflows/build.yml` — builds a **debug** APK on every push and uploads it as the
-  `scholar-debug-apk` artifact, so you can grab a build without a local toolchain.
-- `.github/workflows/release.yml` — on a `v*` tag, builds the **signed release** APK and
-  publishes it as a GitHub Release (and fails rather than publish an unsigned one).
+- `.github/workflows/build.yml` — builds **debug** APKs for both apps on every push and uploads
+  them as the `tianxian-debug-apk` and `tensen-debug-apk` artifacts.
+- `.github/workflows/release.yml` — on a `v*` tag, builds the **signed release** APK for Tianxian
+  and publishes it as a GitHub Release (and fails rather than publish an unsigned one).
 
 ## The bundled data
 
-The dictionary database (`app/src/main/assets/content.db`, ~37 MB) is compiled from open
-datasets by `data-build/build_content_db.py`. **It is already built and committed** — you
+The Chinese dictionary database (`app-zh/src/main/assets/content.db`, ~37 MB) is compiled from
+open datasets by `data-build/build_content_db.py`. **It is already built and committed** — you
 only need the script to rebuild or change the data:
 
 ```bash
@@ -109,32 +128,57 @@ pip install pycccedict wordfreq
 python build_content_db.py
 ```
 
-The example-sentence bank ships as a *separate* `app/src/main/assets/sentences.db` (~5 MB) so
+The example-sentence bank ships as a *separate* `app-zh/src/main/assets/sentences.db` (~5 MB) so
 the main `content.db` is never touched. Rebuild it with `python data-build/build_sentences_db.py`.
 Source datasets and licenses are listed in the [README](../README.md#open-data).
+
+## Japanese, in progress
+
+`:app-ja` (Tensen) is a working shell on top of `:core`. It builds and launches, but ships an
+empty-schema **stub** `content.db`, so the dictionary, levels and home card are blank. Reaching
+parity is the remaining workstream:
+
+- Build a Japanese `content.db`/`sentences.db` from **JMdict/JMnedict**, **KANJIDIC2**,
+  **KanjiVG**, JLPT N5–N1 lists, and **Tatoeba ja→en** (new `data-build` pipeline → `app-ja`).
+- Adapt the language layer in `:core` (today Chinese-shaped): `ContentStore` schema, `Gloss.kt`
+  (JMdict senses), `MaxMatchSegmenter` (kana), retire `Pinyin.kt` (furigana instead), JLPT
+  labels, and inject a Japanese ML Kit OCR recognizer. These branch on `AppConfig.language`.
 
 ## Project structure
 
 ```
 .
-├─ app/src/main/
-│  ├─ assets/content.db              # bundled dictionary / characters / strokes / HSK / genre
-│  ├─ assets/sentences.db            # Tatoeba translated example sentences (separate, optional)
-│  ├─ java/com/scholar/app/
-│  │  ├─ data/content/               # read-only content DB + pinyin conversion + gloss cleanup
-│  │  ├─ data/segment/               # maximal-match word segmenter
-│  │  ├─ data/user/                  # Room: cards, reviews, known chars, books
-│  │  ├─ data/repo/                  # repositories
-│  │  ├─ srs/                        # native FSRS-6 + scheduler
-│  │  ├─ reader/ingest/              # EPUB / TXT / MOBI / PDF / OCR parsers
-│  │  ├─ audio/                      # text-to-speech
-│  │  ├─ ui/screen/                  # Learn, Today, Reader, Review, Dictionary, Guide, …
-│  │  ├─ ui/onboarding/              # first-run intro
-│  │  ├─ ui/Breakthrough.kt          # cultivation breakthrough overlay
-│  │  └─ ui/theme/                   # themes + accent washes
+├─ core/src/main/                     # shared library — com.tianxian.core
+│  ├─ java/com/tianxian/core/
+│  │  ├─ data/content/                # read-only content DB + pinyin conversion + gloss cleanup
+│  │  ├─ data/segment/                # maximal-match word segmenter
+│  │  ├─ data/user/                   # Room: cards, reviews, known chars, books
+│  │  ├─ data/repo/                   # repositories
+│  │  ├─ di/                          # AppGraph, AppConfig, GraphHolder
+│  │  ├─ srs/                         # native FSRS-6 + scheduler
+│  │  ├─ reader/ingest/               # EPUB / TXT / MOBI / PDF / OCR parsers
+│  │  ├─ audio/                       # text-to-speech
+│  │  ├─ update/                      # in-app updater
+│  │  ├─ widget/                      # Glance home-screen widgets
+│  │  ├─ MainActivity.kt              # single activity (shared)
+│  │  ├─ ui/screen/                   # Learn, Today, Reader, Review, Dictionary, Guide, …
+│  │  ├─ ui/onboarding/               # first-run intro
+│  │  ├─ ui/Breakthrough.kt           # cultivation breakthrough overlay
+│  │  └─ ui/theme/                    # themes + accent washes
+│  ├─ res/                            # themes, fonts, widget xml, launcher icon
+│  └─ AndroidManifest.xml             # shared permissions, widget receivers, FileProvider
+├─ app-zh/src/main/                   # Tianxian — com.tianxian.app
+│  ├─ assets/{content.db,sentences.db}  # bundled Chinese data
+│  ├─ java/com/tianxian/app/TianxianApp.kt
+│  ├─ res/values/strings.xml          # app_name 天仙
+│  └─ AndroidManifest.xml             # application + launcher activity
+├─ app-ja/src/main/                   # Tensen — com.tensen.app
+│  ├─ assets/content.db               # stub (Japanese data pending)
+│  ├─ java/com/tensen/app/TensenApp.kt
+│  ├─ res/values/strings.xml
 │  └─ AndroidManifest.xml
-├─ data-build/                       # Python pipeline that builds content.db
+├─ data-build/                        # Python pipeline that builds content.db / sentences.db
 └─ .github/workflows/
-   ├─ build.yml                      # CI: debug APK on every push
-   └─ release.yml                    # CI: signed release APK on a v* tag
+   ├─ build.yml                       # CI: debug APKs on every push
+   └─ release.yml                     # CI: signed release APK on a v* tag
 ```

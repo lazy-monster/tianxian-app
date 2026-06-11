@@ -1,0 +1,8 @@
+<resources>
+    <!-- Base platform theme; Compose drives the real look. Dark ink background. -->
+    <style name="Theme.App" parent="android:Theme.Material.NoActionBar">
+        <item name="android:statusBarColor">#141109</item>
+        <item name="android:navigationBarColor">#141109</item>
+        <item name="android:windowBackground">#141109</item>
+    </style>
+</resources>

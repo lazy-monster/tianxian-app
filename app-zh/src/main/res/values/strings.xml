@@ -1,0 +1,4 @@
+<resources>
+    <!-- Launcher name: the characters 天仙 (read "Tianxian", Heavenly Immortal). -->
+    <string name="app_name">天仙</string>
+</resources>

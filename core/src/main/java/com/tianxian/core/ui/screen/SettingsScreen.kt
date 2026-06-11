@@ -1,0 +1,518 @@
+package com.tianxian.core.ui.screen
+
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.shape.CircleShape
+import com.tianxian.core.di.AppGraph
+import com.tianxian.core.update.Update
+import com.tianxian.core.ui.theme.APP_THEMES
+import com.tianxian.core.ui.theme.SerifSC
+import com.tianxian.core.ui.theme.Theme
+import com.tianxian.core.ui.theme.themeById
+import com.tianxian.core.widget.WidgetUpdater
+import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
+
+@Composable
+fun SettingsScreen(graph: AppGraph, themeId: String, onSetTheme: (String) -> Unit, onBack: () -> Unit,
+                   onOpenGuide: () -> Unit = {}) {
+    val x = Theme.x
+    val context = LocalContext.current
+    val settings = graph.settings
+    val scope = rememberCoroutineScope()
+
+    var soundOn by remember { mutableStateOf(settings.soundEffectsEnabled) }
+    var widgetTheme by remember { mutableStateOf(settings.widgetThemeKey) }
+    var retention by remember { mutableStateOf(settings.desiredRetention) }
+    var hskBatch by remember { mutableStateOf(settings.hskBatchSize) }
+    var radicalBatch by remember { mutableStateOf(settings.radicalBatchSize) }
+    var remindersOn by remember { mutableStateOf(settings.remindersEnabled) }
+    var autoBackup by remember { mutableStateOf(settings.autoBackup) }
+    var backupDir by remember { mutableStateOf(settings.backupTreeUri) }
+    var intervalHours by remember { mutableStateOf(settings.backupIntervalHours) }
+    var status by remember { mutableStateOf<String?>(null) }
+    var showReset by remember { mutableStateOf(false) }
+
+    // Notification permission (Android 13+), requested when reminders are switched on.
+    val notifPermLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()) {}
+
+    // Export: write the backup JSON to a file the user picks.
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri: Uri? ->
+        if (uri != null) scope.launch {
+            status = runCatching { graph.backup.writeTo(uri) }
+                .fold({ "Exported ${it.cards} cards, ${it.known} known characters." },
+                    { "Export failed: ${it.message}" })
+        }
+    }
+    // Import: read and restore a backup the user picks.
+    val importLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        if (uri != null) scope.launch {
+            status = runCatching { graph.backup.restoreFrom(uri) }
+                .fold({ "Imported ${it.cards} cards, ${it.known} known characters, ${it.books} books." },
+                    { "Import failed: ${it.message}" })
+            retention = settings.desiredRetention
+        }
+    }
+    // Backup folder: persist read/write access to a chosen directory.
+    val folderLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            context.contentResolver.takePersistableUriPermission(
+                uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+            settings.backupTreeUri = uri.toString()
+            backupDir = uri.toString()
+            settings.autoBackup = true
+            autoBackup = true
+            scope.launch {
+                status = runCatching { graph.backup.writeToTree(uri) }
+                    .fold({ "Backup folder set. Saved ${it.cards} cards now." },
+                        { "Folder set, but first backup failed: ${it.message}" })
+            }
+        }
+    }
+
+    Column(Modifier.fillMaxSize().background(x.bg).verticalScroll(rememberScrollState()).padding(horizontal = 22.dp)) {
+        ScreenHeader("Settings", onBack = onBack)
+
+        // ── The handbook ─────────────────────────────────────────────────
+        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(x.surface2)
+            .clickable { onOpenGuide() }.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("📜 ${graph.config.appName}'s Path · 指南", color = x.text, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                Text("The recommended workflow for reading webnovels — what to learn, in what order, and why the sounds matter.",
+                    color = x.textSoft, fontSize = 13.sp, lineHeight = 18.sp)
+            }
+            Text("›", color = x.gold, fontSize = 22.sp)
+        }
+        Spacer(Modifier.height(20.dp))
+
+        // ── Appearance: app skin ─────────────────────────────────────────
+        Text("Appearance", fontFamily = SerifSC, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = x.text)
+        Spacer(Modifier.height(8.dp))
+        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(x.surface).padding(16.dp)) {
+            Text("Theme", color = x.text, fontWeight = FontWeight.Medium, fontSize = 15.sp)
+            val current = themeById(themeId)
+            Text("${current.hanzi} · ${current.label} — ${current.blurb}", color = x.textSoft, fontSize = 13.sp)
+            Spacer(Modifier.height(12.dp))
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                APP_THEMES.forEach { t ->
+                    val sel = t.id == themeId
+                    Column(horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.clickable { onSetTheme(t.id) }) {
+                        // a little swatch that previews the skin's surface + gold/cinnabar/jade accents
+                        Box(
+                            Modifier.size(54.dp).clip(RoundedCornerShape(14.dp))
+                                .background(t.colors.bg).padding(7.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Box(Modifier.fillMaxSize().clip(RoundedCornerShape(9.dp)).background(t.colors.surface2),
+                                contentAlignment = Alignment.Center) {
+                                Text(t.hanzi, fontFamily = SerifSC, color = t.colors.gold, fontSize = 20.sp,
+                                    fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+                        Spacer(Modifier.height(5.dp))
+                        Box(Modifier.size(width = 30.dp, height = 4.dp).clip(CircleShape)
+                            .background(if (sel) x.cinnabar else Color.Transparent))
+                    }
+                }
+            }
+        }
+
+        // ── Interactive sounds ───────────────────────────────────────────
+        Spacer(Modifier.height(12.dp))
+        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(x.surface).padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Trial sounds", color = x.text, fontWeight = FontWeight.Medium, fontSize = 15.sp)
+                Text("Soft cues for right, wrong and breakthrough — a quiet rhythm that keeps you going.",
+                    color = x.textSoft, fontSize = 13.sp, lineHeight = 18.sp)
+            }
+            Switch(checked = soundOn, onCheckedChange = { on ->
+                soundOn = on; settings.soundEffectsEnabled = on
+                if (on) graph.soundFx.correct()   // preview the cue when switching it on
+            }, colors = SwitchDefaults.colors(checkedThumbColor = x.gold, checkedTrackColor = x.cinnabarDeep,
+                uncheckedThumbColor = x.textSoft, uncheckedTrackColor = x.surface2))
+        }
+
+        // ── Widget appearance ────────────────────────────────────────────
+        Spacer(Modifier.height(12.dp))
+        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(x.surface).padding(16.dp)) {
+            Text("Home-screen widgets", color = x.text, fontWeight = FontWeight.Medium, fontSize = 15.sp)
+            Text("Skin for the cultivation and character widgets. “Match app” follows your theme above; " +
+                "pick a fixed skin (e.g. a light one) if your home screen calls for it.",
+                color = x.textSoft, fontSize = 13.sp, lineHeight = 18.sp)
+            Spacer(Modifier.height(12.dp))
+            val widgetOptions = listOf("follow" to "Match app", "ink" to "墨 Ink", "paper" to "纸 Paper",
+                "jade" to "青 Jade", "vermilion" to "丹 Cinnabar", "azure" to "黛 Azure", "bamboo" to "竹 Bamboo")
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                widgetOptions.forEach { (key, label) ->
+                    val sel = widgetTheme == key
+                    Box(Modifier.clip(RoundedCornerShape(12.dp))
+                        .background(if (sel) x.cinnabar else x.surface2)
+                        .clickable {
+                            widgetTheme = key; settings.widgetThemeKey = key
+                            WidgetUpdater.refresh(context)
+                        }
+                        .padding(horizontal = 14.dp, vertical = 9.dp)) {
+                        Text(label, color = if (sel) Color.White else x.textSoft, fontSize = 13.sp,
+                            fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal)
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+
+        // ── Review difficulty (FSRS desired retention) ───────────────────
+        Spacer(Modifier.height(20.dp))
+        Text("Review", fontFamily = SerifSC, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = x.text)
+        Spacer(Modifier.height(8.dp))
+        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(x.surface).padding(16.dp)) {
+            Text("Target memory strength", color = x.text, fontWeight = FontWeight.Medium, fontSize = 15.sp)
+            Text("Higher means shorter gaps and more frequent reviews — safer, but more work. " +
+                "Early reviews of a new card are always kept close together until it proves it has stuck.",
+                color = x.textSoft, fontSize = 13.sp, lineHeight = 19.sp)
+            Spacer(Modifier.height(10.dp))
+            Text("${(retention * 100).roundToInt()}% recall target", color = x.gold, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+            Slider(
+                value = retention, onValueChange = { retention = it },
+                onValueChangeFinished = { settings.desiredRetention = retention },
+                valueRange = 0.80f..0.97f,
+                colors = SliderDefaults.colors(thumbColor = x.cinnabar, activeTrackColor = x.cinnabar,
+                    inactiveTrackColor = x.surface2),
+            )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("relaxed (80%)", color = x.textFaint, fontSize = 11.sp)
+                Text("intense (97%)", color = x.textFaint, fontSize = 11.sp)
+            }
+        }
+
+        // ── New-card batch size (HSK "add next N") ───────────────────────
+        Spacer(Modifier.height(12.dp))
+        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(x.surface).padding(16.dp)) {
+            Text("New cards per batch", color = x.text, fontWeight = FontWeight.Medium, fontSize = 15.sp)
+            Text("How many words the vocabulary lists add to your review deck each time you tap " +
+                "“add next batch”. Smaller batches keep new material manageable.",
+                color = x.textSoft, fontSize = 13.sp, lineHeight = 19.sp)
+            Spacer(Modifier.height(10.dp))
+            Text("$hskBatch cards at a time", color = x.gold, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+            Slider(
+                value = hskBatch.toFloat(), onValueChange = { hskBatch = it.roundToInt() },
+                onValueChangeFinished = { settings.hskBatchSize = hskBatch },
+                valueRange = 5f..100f, steps = 18,   // 5,10,15,…,100
+                colors = SliderDefaults.colors(thumbColor = x.cinnabar, activeTrackColor = x.cinnabar,
+                    inactiveTrackColor = x.surface2),
+            )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("5", color = x.textFaint, fontSize = 11.sp)
+                Text("100", color = x.textFaint, fontSize = 11.sp)
+            }
+        }
+
+        // ── Radical trial batch size ─────────────────────────────────────
+        Spacer(Modifier.height(12.dp))
+        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(x.surface).padding(16.dp)) {
+            Text("Radicals per trial", color = x.text, fontWeight = FontWeight.Medium, fontSize = 15.sp)
+            Text("How many radicals each Cultivation trial covers. Changing this re-forms the trials and " +
+                "resets track progress.", color = x.textSoft, fontSize = 13.sp, lineHeight = 19.sp)
+            Spacer(Modifier.height(10.dp))
+            Text("$radicalBatch per trial", color = x.gold, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+            Slider(
+                value = radicalBatch.toFloat(), onValueChange = { radicalBatch = it.roundToInt() },
+                onValueChangeFinished = { settings.radicalBatchSize = radicalBatch; radicalBatch = settings.radicalBatchSize },
+                valueRange = 5f..40f, steps = 6,   // 5,10,…,40
+                colors = SliderDefaults.colors(thumbColor = x.cinnabar, activeTrackColor = x.cinnabar,
+                    inactiveTrackColor = x.surface2),
+            )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("5", color = x.textFaint, fontSize = 11.sp)
+                Text("40", color = x.textFaint, fontSize = 11.sp)
+            }
+        }
+
+        // ── Reminders ────────────────────────────────────────────────────
+        Spacer(Modifier.height(12.dp))
+        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(x.surface).padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Review reminders", color = x.text, fontWeight = FontWeight.Medium, fontSize = 15.sp)
+                Text("A daily nudge when reviews are ready, or if you've gone quiet.", color = x.textSoft, fontSize = 13.sp)
+            }
+            Switch(checked = remindersOn, onCheckedChange = { on ->
+                remindersOn = on; settings.remindersEnabled = on
+                if (on) {
+                    com.tianxian.core.notify.Reminders.schedule(context)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS)
+                        != PackageManager.PERMISSION_GRANTED) {
+                        notifPermLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    }
+                } else com.tianxian.core.notify.Reminders.cancel(context)
+            }, colors = SwitchDefaults.colors(checkedThumbColor = x.gold, checkedTrackColor = x.cinnabarDeep,
+                uncheckedThumbColor = x.textSoft, uncheckedTrackColor = x.surface2))
+        }
+
+        // ── Backup & restore ─────────────────────────────────────────────
+        Spacer(Modifier.height(20.dp))
+        Text("Backup & restore", fontFamily = SerifSC, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = x.text)
+        Spacer(Modifier.height(8.dp))
+        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(x.surface).padding(16.dp)) {
+            Text("Your progress — every card, review, known character and book — exports to one " +
+                "portable JSON file. Move it to a new phone and import to pick up exactly where you left off.",
+                color = x.textSoft, fontSize = 13.sp, lineHeight = 19.sp)
+            Spacer(Modifier.height(14.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                SettingButton("⬆ Export", x.surface2, Modifier.weight(1f)) {
+                    exportLauncher.launch("${graph.config.slug}-backup.json")
+                }
+                SettingButton("⬇ Import", x.surface2, Modifier.weight(1f)) {
+                    importLauncher.launch(arrayOf("application/json", "text/plain", "*/*"))
+                }
+            }
+
+            Spacer(Modifier.height(18.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Automatic backups", color = x.text, fontWeight = FontWeight.Medium, fontSize = 15.sp)
+                    Text(if (backupDir == null) "Choose a folder to save snapshots to"
+                        else "Saving to your chosen folder", color = x.textSoft, fontSize = 13.sp)
+                }
+                Switch(checked = autoBackup && backupDir != null,
+                    onCheckedChange = { on ->
+                        if (on && backupDir == null) folderLauncher.launch(null)
+                        else { autoBackup = on; settings.autoBackup = on }
+                    },
+                    colors = SwitchDefaults.colors(checkedThumbColor = x.gold, checkedTrackColor = x.cinnabarDeep,
+                        uncheckedThumbColor = x.textSoft, uncheckedTrackColor = x.surface2))
+            }
+
+            if (backupDir != null) {
+                Spacer(Modifier.height(12.dp))
+                Text("How often", color = x.textSoft, fontSize = 12.sp)
+                Spacer(Modifier.height(6.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("Daily" to 24, "Every 3 days" to 72, "Weekly" to 168).forEach { (label, hrs) ->
+                        val sel = intervalHours == hrs
+                        Box(Modifier.clip(RoundedCornerShape(12.dp))
+                            .background(if (sel) x.cinnabar else x.surface2)
+                            .clickable { intervalHours = hrs; settings.backupIntervalHours = hrs }
+                            .padding(horizontal = 14.dp, vertical = 8.dp)) {
+                            Text(label, color = if (sel) Color.White else x.textSoft, fontSize = 13.sp,
+                                fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal)
+                        }
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    SettingButton("Back up now", x.surface2, Modifier.weight(1f)) {
+                        scope.launch {
+                            status = runCatching { graph.backup.writeToTree(Uri.parse(backupDir)) }
+                                .fold({ "Saved ${it.cards} cards to your folder." }, { "Backup failed: ${it.message}" })
+                        }
+                    }
+                    SettingButton("Change folder", x.surface2, Modifier.weight(1f)) { folderLauncher.launch(null) }
+                }
+            }
+
+            status?.let {
+                Spacer(Modifier.height(12.dp))
+                Text(it, color = x.jade, fontSize = 13.sp, lineHeight = 18.sp)
+            }
+        }
+
+        // ── Reset progress ───────────────────────────────────────────────
+        Spacer(Modifier.height(20.dp))
+        Text("Reset", fontFamily = SerifSC, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = x.text)
+        Spacer(Modifier.height(8.dp))
+        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(x.surface).padding(16.dp)) {
+            Text("Start over. This permanently erases your learning progress and cannot be undone — " +
+                "export a backup first if you might want it back.",
+                color = x.textSoft, fontSize = 13.sp, lineHeight = 19.sp)
+            Spacer(Modifier.height(14.dp))
+            SettingButton("Reset progress…", x.surface2) { showReset = true }
+        }
+
+        // ── Updates ──────────────────────────────────────────────────────
+        UpdatesSection(graph)
+
+        // ── About ────────────────────────────────────────────────────────
+        Spacer(Modifier.height(20.dp))
+        Text("About", fontFamily = SerifSC, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = x.text)
+        Spacer(Modifier.height(8.dp))
+        AboutCard(graph.config.appName, "A free, offline-first app for learning to read Chinese web novels — pinyin first, characters by their components, frequency-ordered vocabulary, spaced repetition, and a friction-free reader.")
+        Spacer(Modifier.height(10.dp))
+        AboutCard("Open data", "Dictionary: CC-CEDICT (CC BY-SA). Characters & strokes: Make Me a Hanzi (Arphic). Levels: complete-hsk-vocabulary (MIT). Frequency: wordfreq (MIT). Example sentences: Tatoeba (CC BY 2.0 FR). The 214 radicals are curated reference data.")
+        Spacer(Modifier.height(10.dp))
+        AboutCard("Your data stays yours", "No account, no ads, no tracking. Your progress and imported books live only on this device — back them up above whenever you like.")
+        Spacer(Modifier.height(30.dp))
+    }
+
+    if (showReset) {
+        val reset: (Boolean) -> Unit = { includeBooks ->
+            scope.launch {
+                graph.backup.resetProgress(includeBooks)
+                status = if (includeBooks) "Everything was reset — deck and library are empty."
+                    else "Review progress was reset. Your imported books were kept."
+                showReset = false
+            }
+        }
+        AlertDialog(
+            onDismissRequest = { showReset = false },
+            containerColor = x.surface,
+            title = { Text("Reset progress?", color = x.text, fontFamily = SerifSC,
+                fontWeight = FontWeight.SemiBold, fontSize = 18.sp) },
+            text = {
+                Text("This can't be undone — export a backup first if unsure.\n\n" +
+                    "• Review progress: deletes every card, all review history and known-character " +
+                    "strength, but keeps your imported books.\n\n" +
+                    "• Everything: also removes your imported library from this device.",
+                    color = x.textSoft, fontSize = 14.sp, lineHeight = 20.sp)
+            },
+            confirmButton = {
+                Column(horizontalAlignment = Alignment.End) {
+                    TextButton(onClick = { reset(false) }) {
+                        Text("Reset review progress", color = x.cinnabar, fontWeight = FontWeight.SemiBold)
+                    }
+                    TextButton(onClick = { reset(true) }) {
+                        Text("Reset everything", color = x.cinnabar, fontWeight = FontWeight.Bold)
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showReset = false }) { Text("Cancel", color = x.textSoft) }
+            },
+        )
+    }
+}
+
+/** Check GitHub for a newer release and install it in place — the app is sideloaded, so there's
+    no store to do this. Networking happens only when the user taps "Check for updates". */
+@Composable
+private fun UpdatesSection(graph: AppGraph) {
+    val x = Theme.x
+    val scope = rememberCoroutineScope()
+    val installed = remember { graph.updater.current() }
+
+    var checking by remember { mutableStateOf(false) }
+    var update by remember { mutableStateOf<Update?>(null) }
+    var progress by remember { mutableStateOf<Int?>(null) }   // non-null while downloading
+    var msg by remember { mutableStateOf<String?>(null) }
+
+    fun startDownload(u: Update) {
+        if (!graph.updater.canInstall()) {
+            graph.updater.requestInstallPermission()
+            msg = "Allow ${graph.config.appName} to install apps, then tap Update again."
+            return
+        }
+        progress = 0; msg = null
+        scope.launch {
+            runCatching { graph.updater.install(graph.updater.download(u) { progress = it }) }
+                .onSuccess { msg = "Opening the installer…" }
+                .onFailure { msg = "Download failed: ${it.message}" }
+            progress = null
+        }
+    }
+
+    Spacer(Modifier.height(20.dp))
+    Text("Updates", fontFamily = SerifSC, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = x.text)
+    Spacer(Modifier.height(8.dp))
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(x.surface).padding(16.dp)) {
+        Text("Installed version ${installed.first}", color = x.textSoft, fontSize = 14.sp)
+
+        val u = update
+        if (u != null) {
+            Spacer(Modifier.height(10.dp))
+            Text("Version ${u.versionName} is available", color = x.gold,
+                fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+            if (u.notes.isNotBlank()) {
+                Spacer(Modifier.height(4.dp))
+                Text(u.notes, color = x.textSoft, fontSize = 13.sp, lineHeight = 19.sp, maxLines = 8)
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+        val downloading = progress != null
+        if (downloading) {
+            LinearProgressIndicator(progress = { (progress ?: 0) / 100f },
+                modifier = Modifier.fillMaxWidth(), color = x.jade, trackColor = x.surface2)
+            Spacer(Modifier.height(6.dp))
+            Text("Downloading ${progress ?: 0}%…", color = x.textSoft, fontSize = 12.sp)
+        } else if (u != null) {
+            SettingButton("Update to ${u.versionName}", x.jade) { startDownload(u) }
+        } else {
+            SettingButton(if (checking) "Checking…" else "Check for updates", x.surface2) {
+                if (checking) return@SettingButton
+                checking = true; msg = null
+                scope.launch {
+                    runCatching { graph.updater.check() }
+                        .onSuccess { found ->
+                            update = found
+                            if (found == null) msg = "You're on the latest version (${installed.first})."
+                        }
+                        .onFailure { msg = "Couldn't check for updates: ${it.message}" }
+                    checking = false
+                }
+            }
+        }
+
+        msg?.let {
+            Spacer(Modifier.height(10.dp))
+            Text(it, color = x.textSoft, fontSize = 13.sp, lineHeight = 18.sp)
+        }
+    }
+}
+
+@Composable
+private fun SettingButton(label: String, bg: Color, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    val x = Theme.x
+    Box(modifier.clip(RoundedCornerShape(14.dp)).background(bg).clickable { onClick() }
+        .padding(vertical = 13.dp), contentAlignment = Alignment.Center) {
+        Text(label, color = x.text, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+    }
+}
+
+@Composable
+private fun AboutCard(title: String, body: String) {
+    val x = Theme.x
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(x.surface).padding(16.dp)) {
+        Text(title, color = x.gold, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+        Spacer(Modifier.height(4.dp))
+        Text(body, color = x.textSoft, fontSize = 14.sp, lineHeight = 21.sp)
+    }
+}

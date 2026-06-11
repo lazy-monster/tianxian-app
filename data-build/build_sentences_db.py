@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Build sentences.db — a compact, translated example-sentence bank for Scholar.
+Build sentences.db — a compact, translated example-sentence bank for Tianxian.
 
 Source: Tatoeba (CC-BY 2.0 FR). We download the Mandarin and English sentence exports
 plus the link table, join Mandarin sentences to their English translations, and store the
@@ -27,7 +27,7 @@ CMN = f"{BASE}/per_language/cmn/cmn_sentences.tsv.bz2"
 ENG = f"{BASE}/per_language/eng/eng_sentences.tsv.bz2"
 LINKS = f"{BASE}/links.tar.bz2"
 
-OUT = os.path.join(os.path.dirname(__file__), "..", "app", "src", "main", "assets", "sentences.db")
+OUT = os.path.join(os.path.dirname(__file__), "..", "app-zh", "src", "main", "assets", "sentences.db")
 CACHE = os.path.join(os.path.dirname(__file__), ".tatoeba")
 MAX_PER_WORD_LEN = 40          # skip very long sentences — poor for flashcard study
 MAX_TRANSLATIONS = 2           # keep up to this many English translations per Mandarin sentence

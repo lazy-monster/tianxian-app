@@ -1,33 +1,39 @@
 <div align="center">
 
-# Scholar
+# 天仙 Tianxian
 
 **Learn to read Chinese webnovels. Free, offline, no account.**
 
 学 · 拼 · 木 · 书
 
-[![Latest release](https://img.shields.io/github/v/release/lazy-monster/scholar-app?label=download&sort=semver)](https://github.com/lazy-monster/scholar-app/releases/latest)
-[![Downloads](https://img.shields.io/github/downloads/lazy-monster/scholar-app/total)](https://github.com/lazy-monster/scholar-app/releases)
-[![Build](https://github.com/lazy-monster/scholar-app/actions/workflows/build.yml/badge.svg)](https://github.com/lazy-monster/scholar-app/actions/workflows/build.yml)
+[![Latest release](https://img.shields.io/github/v/release/lazy-monster/tianxian-app?label=download&sort=semver)](https://github.com/lazy-monster/tianxian-app/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/lazy-monster/tianxian-app/total)](https://github.com/lazy-monster/tianxian-app/releases)
+[![Build](https://github.com/lazy-monster/tianxian-app/actions/workflows/build.yml/badge.svg)](https://github.com/lazy-monster/tianxian-app/actions/workflows/build.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](#license)
 
-### → [**Download the APK**](https://github.com/lazy-monster/scholar-app/releases/latest) ←
+### → [**Download the APK**](https://github.com/lazy-monster/tianxian-app/releases/latest) ←
 
-No ads, no tracking, no subscription. If Scholar helps you, a ⭐ is appreciated.
+No ads, no tracking, no subscription. If Tianxian helps you, a ⭐ is appreciated.
 
 </div>
 
 ---
 
-## Why Scholar
+> **天仙 — two apps, one codebase.** **Tianxian** (the Mandarin reading of 天仙, "Heavenly
+> Immortal") is the Chinese reading app described below. **Tensen** — the Japanese reading of the
+> same characters — is the parallel Japanese app built from the shared `:core` library; its
+> Japanese content is still in progress. See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for the
+> module layout (`:core`, `:app-zh`, `:app-ja`).
 
-Most apps train you for the HSK exam. Scholar trains you for the moment you open a *xianxia*
+## Why Tianxian
+
+Most apps train you for the HSK exam. Tianxian trains you for the moment you open a *xianxia*
 novel and just… read it. Dictionary, curriculum, spaced repetition, and an ebook reader in one
 offline app — and your progress is measured in characters you can actually read, not exam levels.
 
 ## Install
 
-1. Download `scholar-<version>.apk` from the [latest release](https://github.com/lazy-monster/scholar-app/releases/latest).
+1. Download `tianxian-<version>.apk` from the [latest release](https://github.com/lazy-monster/tianxian-app/releases/latest).
 2. Open it on your phone (Android 8.0+). Allow "install from unknown sources" when asked — that's
    normal for apps outside the Play Store.
 3. Done. After that, **Settings → Updates** checks for new releases and installs them in place —
@@ -67,11 +73,11 @@ The short version:
 3. Import a novel *far* earlier than feels reasonable and tap your way through it.
 
 The full recommended workflow — what to learn in what order, when to start reading, how to grade
-yourself — lives **inside the app**: *Settings → Scholar's Path (指南)*.
+yourself — lives **inside the app**: *Settings → Tianxian's Path (指南)*.
 
 ## Open data
 
-Scholar is built on open datasets, bundled and ready — nothing downloads at runtime.
+Tianxian is built on open datasets, bundled and ready — nothing downloads at runtime.
 
 | Source | License | Provides |
 |---|---|---|
@@ -87,7 +93,7 @@ Scholar is built on open datasets, bundled and ready — nothing downloads at ru
 - Audio uses your device's Chinese text-to-speech voice (usually Google Speech Services) —
   updating its Chinese voice data in system settings improves every sound in the app.
 - MOBI support covers the common case; convert HUFF/CDIC or KF8/AZW3 files to EPUB first.
-- Scanned-page OCR (ML Kit) downloads its Chinese model on first use.
+- Scanned-page OCR (ML Kit) uses its bundled Chinese model.
 - No novels are included — you bring your own books.
 
 ## For developers

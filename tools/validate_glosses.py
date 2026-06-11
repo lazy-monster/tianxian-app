@@ -4,7 +4,7 @@ the bundled content.db and asserts that no learner-facing meaning leads with cro
 NOISE ("surname Du", "variant of …", "see …", "CL:…", "abbr. for …").
 
 Faithful Python mirror of:
-  - app/src/main/java/com/scholar/app/data/content/Gloss.kt
+  - core/src/main/java/com/tianxian/core/data/content/Gloss.kt
   - the hsk_word fallback in ContentStore.hskWords (merged dict_entry, then cross-ref target).
 
 Two sense tiers (this is the key design point):
@@ -19,7 +19,7 @@ Run:  python3 tools/validate_glosses.py   (exit 0 clean, 1 with offending rows)
 """
 import sqlite3, sys, os, re
 
-DB = os.path.join(os.path.dirname(__file__), "..", "app", "src", "main", "assets", "content.db")
+DB = os.path.join(os.path.dirname(__file__), "..", "app-zh", "src", "main", "assets", "content.db")
 
 NOISE_PREFIXES = (
     "surname ", "variant of ", "old variant of ", "archaic variant of ", "erhua variant",

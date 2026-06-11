@@ -28,10 +28,16 @@ jobs:
           gradle-version: "8.9"
 
       - name: Build debug APK
-        run: gradle assembleDebug
+        run: gradle :app-zh:assembleDebug :app-ja:assembleDebug
 
-      - name: Upload APK
+      - name: Upload Tianxian APK
         uses: actions/upload-artifact@v4
         with:
-          name: scholar-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
+          name: tianxian-debug-apk
+          path: app-zh/build/outputs/apk/debug/*.apk
+
+      - name: Upload Tensen APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: tensen-debug-apk
+          path: app-ja/build/outputs/apk/debug/*.apk

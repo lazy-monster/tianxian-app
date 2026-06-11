@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Scholar · content.db builder
-=============================
+Tianxian · content.db builder
+==============================
 Pulls open datasets through code and compiles one read-only SQLite database that
-ships in app/src/main/assets/. Run from data-build/:
+ships in app-zh/src/main/assets/ (the Chinese app). Run from data-build/:
 
     pip install pycccedict wordfreq
     python build_content_db.py
@@ -23,7 +23,7 @@ from wordfreq import top_n_list
 import genre_terms, radicals
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ASSETS = os.path.normpath(os.path.join(HERE, "..", "app", "src", "main", "assets"))
+ASSETS = os.path.normpath(os.path.join(HERE, "..", "app-zh", "src", "main", "assets"))
 DB = os.path.join(ASSETS, "content.db")
 MMAH_DICT = "https://raw.githubusercontent.com/skishore/makemeahanzi/master/dictionary.txt"
 MMAH_GFX = "https://raw.githubusercontent.com/skishore/makemeahanzi/master/graphics.txt"

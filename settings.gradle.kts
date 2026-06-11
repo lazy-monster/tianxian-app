@@ -5,5 +5,5 @@ dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories { google(); mavenCentral() }
 }
-rootProject.name = "Scholar"
-include(":app")
+rootProject.name = "Tianxian"
+include(":core", ":app-zh", ":app-ja")
