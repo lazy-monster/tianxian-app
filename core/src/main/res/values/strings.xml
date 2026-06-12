@@ -2,8 +2,6 @@
     <!-- Widget receiver labels (core manifest) and descriptions (widget-info xml). Defined here so
          the library links standalone; both apps are branded 天仙. An app module may override any of
          these by redeclaring the same string name. -->
-    <string name="widget_character_label">天仙 · Character</string>
     <string name="widget_status_label">天仙 · Cultivation</string>
-    <string name="widget_character_desc">A rotating character with its reading and meaning.</string>
-    <string name="widget_status_desc">Your cultivation rank, characters known, and reviews due.</string>
+    <string name="widget_status_desc">Your cultivation rank and reviews due, with a rotating character to study.</string>
 </resources>

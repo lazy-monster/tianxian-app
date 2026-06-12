@@ -27,8 +27,11 @@ android {
         applicationId = "com.tianxian.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 11
-        versionName = "0.10.5"
+        // v0.11.0 shipped with versionName left at 0.10.5, so installs report 0.10.5 and the
+        // updater nags forever (latest tag v0.11.0 > 0.10.5). 0.11.1 is the corrected next release;
+        // CI overrides these from the pushed tag so name and tag can never drift again (release.yml).
+        versionCode = (project.findProperty("appVersionCode") as String?)?.toInt() ?: 12
+        versionName = (project.findProperty("appVersionName") as String?) ?: "0.11.1"
         vectorDrawables { useSupportLibrary = true }
     }
     signingConfigs {

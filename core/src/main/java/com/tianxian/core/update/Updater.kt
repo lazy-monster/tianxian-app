@@ -9,6 +9,7 @@ import android.provider.Settings
 import androidx.core.content.FileProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.net.HttpURLConnection
@@ -35,20 +36,40 @@ class Updater(private val context: Context, private val config: AppConfig) {
         return (info.versionName ?: "") to code
     }
 
-    /** The latest published release, or null if there's none newer than what's installed. */
+    /** The latest published release for THIS app, or null if none is newer than what's installed.
+     *
+     *  Lists releases rather than asking for `/releases/latest`: one repo may host more than one app
+     *  (Tianxian + Tensen, see AppConfig.updateRepo), so the newest release overall can belong to the
+     *  other app. This app's release is the newest one carrying an APK named "${slug}-…apk". */
     suspend fun check(): Update? = withContext(Dispatchers.IO) {
-        val obj = JSONObject(httpGet("https://api.github.com/repos/${config.updateRepo}/releases/latest"))
-        val tag = obj.optString("tag_name").removePrefix("v")
-        if (tag.isBlank() || !isNewer(tag, current().first)) return@withContext null
-        val assets = obj.optJSONArray("assets") ?: return@withContext null
+        val arr = JSONArray(httpGet("https://api.github.com/repos/${config.updateRepo}/releases?per_page=30"))
+        var best: Update? = null
+        for (i in 0 until arr.length()) {
+            val rel = arr.getJSONObject(i)
+            if (rel.optBoolean("draft") || rel.optBoolean("prerelease")) continue
+            // "v0.11.2" / "zh-v0.11.2" / "ja-v0.1.0" → "0.11.2" / "0.11.2" / "0.1.0"
+            val version = rel.optString("tag_name").substringAfterLast('-').removePrefix("v")
+            if (version.isBlank()) continue
+            val apk = appApk(rel.optJSONArray("assets")) ?: continue
+            val url = apk.optString("browser_download_url")
+            if (url.isBlank()) continue
+            val cand = Update(version, rel.optString("body").trim(), url, apk.optLong("size"))
+            if (best == null || isNewer(cand.versionName, best!!.versionName)) best = cand
+        }
+        best?.takeIf { isNewer(it.versionName, current().first) }
+    }
+
+    /** This app's APK among a release's assets — named "${slug}-…apk" by the release workflow. A
+        per-app prefix (never a bare ".apk") keeps a shared repo from offering one app the other's
+        build. Null when the release has no matching APK (i.e. it's the other app's release). */
+    private fun appApk(assets: JSONArray?): JSONObject? {
+        if (assets == null) return null
         for (i in 0 until assets.length()) {
             val a = assets.getJSONObject(i)
-            if (a.optString("name").endsWith(".apk", ignoreCase = true)) {
-                val url = a.optString("browser_download_url")
-                if (url.isNotBlank()) return@withContext Update(tag, obj.optString("body").trim(), url, a.optLong("size"))
-            }
+            val name = a.optString("name")
+            if (name.endsWith(".apk", ignoreCase = true) && name.startsWith("${config.slug}-", ignoreCase = true)) return a
         }
-        null
+        return null
     }
 
     /** Download the APK into the cache, reporting 0..100 progress. Returns the saved file. */

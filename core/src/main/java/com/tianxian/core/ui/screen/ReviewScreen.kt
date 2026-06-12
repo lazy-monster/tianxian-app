@@ -24,7 +24,9 @@ import com.tianxian.core.srs.Rating
 import com.tianxian.core.ui.theme.SerifSC
 import com.tianxian.core.ui.theme.Theme
 import com.tianxian.core.ui.theme.promptWash
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun ReviewScreen(graph: AppGraph, onOpenChar: (String) -> Unit = {}) {
@@ -147,9 +149,21 @@ fun ReviewScreen(graph: AppGraph, onOpenChar: (String) -> Unit = {}) {
                 if (flipped) {
                     Spacer(Modifier.height(18.dp))
                     val parts = card.backRef.split(" · ", limit = 2)
+                    val storedGloss = parts.getOrElse(1) { card.backRef }
+                    // Repair legacy / cross-ref-only cards on the fly: when the stored gloss is
+                    // nothing but metadata ("surname An", "old variant of …"), pull the word's real
+                    // dictionary gloss instead. Old cards minted before the gloss fallback (v10.4),
+                    // including those carried over from the Scholar rebrand, froze the noise in.
+                    val gloss by produceState(storedGloss, card.id) {
+                        value = if (Gloss.hasRealSense(storedGloss)) storedGloss
+                            else withContext(Dispatchers.IO) {
+                                graph.dictionary.resolvedGloss(card.frontRef)
+                                    .takeIf { Gloss.hasRealSense(it) } ?: storedGloss
+                            }
+                    }
                     Text(parts.getOrElse(0) { "" }, color = x.gold, fontSize = 24.sp)
                     Spacer(Modifier.height(8.dp))
-                    Text(coreGloss(parts.getOrElse(1) { card.backRef }), color = x.text, fontSize = 17.sp,
+                    Text(coreGloss(gloss), color = x.text, fontSize = 17.sp,
                         modifier = Modifier.padding(horizontal = 24.dp))
                     Spacer(Modifier.height(12.dp))
                     Text("🔊", fontSize = 26.sp, modifier = Modifier.clickable {

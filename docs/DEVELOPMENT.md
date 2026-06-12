@@ -99,22 +99,39 @@ uninstall/reinstall; leak it and anyone can sign a malicious "update". Then eith
 
 ## Cutting a release
 
-Bump `versionCode`/`versionName` in `app-zh/build.gradle.kts`, then tag and push:
+Both apps ship from this one repo (**Option B**). The **tag prefix picks the app**; just tag and
+push — no manual version bump:
 
 ```bash
-git tag v0.11.0 && git push origin v0.11.0
+git tag v0.11.1   && git push origin v0.11.1     # Tianxian (:app-zh) — bare "v" or "zh-v"
+git tag ja-v0.1.0 && git push origin ja-v0.1.0   # Tensen   (:app-ja)
 ```
 
-`.github/workflows/release.yml` builds the signed `:app-zh` release APK and publishes it as a
-GitHub **Release** named after the tag. The in-app updater's release channel is set per app in
-`AppConfig.updateRepo`.
+`.github/workflows/release.yml` reads the version *from the tag*, injects it into the build
+(`-PappVersionName`), builds the matching signed module, and publishes a GitHub **Release** named
+after the tag with the APK attached as `<slug>-v<version>.apk` (`tianxian-…` / `tensen-…`).
+
+- **Version name comes from the tag**, so the built APK can never disagree with its release tag.
+  (That mismatch is exactly what broke v0.11.0: the tag said 0.11.0 but `build.gradle.kts` still
+  said 0.10.5, so the updater nagged forever. The hard-coded `versionName` is now only a
+  local/debug default, overridden in CI.)
+- **Version code is `1000 + CI run number`** — monotonic, above all historical hand-set codes, no
+  manual bumping.
+- The in-app updater polls `AppConfig.updateRepo` (the shared repo for both apps) and selects its
+  own release by the `<slug>-…apk` asset name (`Updater.appApk`), so one app never offers the
+  other's build.
+
+> The first corrected Tianxian release must be **v0.11.1** (v0.11.0 is taken and shipped the wrong
+> version): existing installs report 0.10.5, see v0.11.1 > 0.10.5, update once, and then match — the
+> phantom-update loop ends.
 
 ## Continuous integration
 
 - `.github/workflows/build.yml` — builds **debug** APKs for both apps on every push and uploads
   them as the `tianxian-debug-apk` and `tensen-debug-apk` artifacts.
-- `.github/workflows/release.yml` — on a `v*` tag, builds the **signed release** APK for Tianxian
-  and publishes it as a GitHub Release (and fails rather than publish an unsigned one).
+- `.github/workflows/release.yml` — on a `v*` / `zh-v*` / `ja-v*` tag, builds the **signed release**
+  APK for the matching app (version from the tag) and publishes it as a GitHub Release (and fails
+  rather than publish an unsigned one).
 
 ## The bundled data
 

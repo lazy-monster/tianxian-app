@@ -179,6 +179,20 @@ class ContentStore private constructor(
         "SELECT group_concat(gloss, ' / ') FROM dict_entry WHERE simplified=?", arrayOf(word)
     ).use { if (it.moveToFirst()) it.getString(0) ?: "" else "" }
 
+    /** Best learnable gloss for [word] — used to repair a review card whose stored gloss is only
+        cross-reference noise ("surname An", "old variant of …"). Mirrors [bestMeaning]'s fallback
+        without an HSK row: the merged dictionary gloss, or the gloss of the word it points at.
+        Blank when [word] isn't in the dictionary, so the caller can keep what it had. */
+    fun resolvedGloss(word: String): String {
+        if (word.isBlank()) return ""
+        val merged = mergedGloss(word)
+        if (Gloss.hasRealSense(merged)) return merged
+        Gloss.crossRefTarget(merged.ifBlank { word })?.let { target ->
+            mergedGloss(target).takeIf { Gloss.hasRealSense(it) }?.let { return it }
+        }
+        return merged
+    }
+
     // ── genre module ────────────────────────────────────────────────────
     fun genreTerms(): List<GenreTerm> = db.rawQuery(
         "SELECT word,category,pinyin,gloss,realm_rank FROM genre_term", null

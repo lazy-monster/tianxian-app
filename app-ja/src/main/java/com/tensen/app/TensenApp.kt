@@ -26,7 +26,10 @@ class TensenApp : Application(), GraphHolder {
             language = Lang.JA,
             appName = "Tensen",
             slug = "tensen",
-            updateRepo = "lazy-monster/tensen-app",   // create this repo when Tensen is ready to ship (Phase 4)
+            // Option B: both apps ship from one repo. Tensen polls the same releases as Tianxian and
+            // picks its own build by the "tensen-…apk" asset name (see Updater.appApk). No release
+            // carries a tensen APK until Phase 4, so the updater simply finds nothing until then.
+            updateRepo = "lazy-monster/tianxian-app",
             userAgent = "tensen-app",
             backupId = "tensen",
             acceptedBackupIds = setOf("tensen"),

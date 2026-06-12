@@ -37,6 +37,8 @@ class DictionaryRepository(private val content: ContentStore) {
     fun charactersWithRadical(radical: String) = content.charactersWithRadical(radical)
     fun hskWords(levelKey: String, limit: Int = 200) = content.hskWords(levelKey, limit)
     fun examples(word: String, limit: Int = 4) = content.examples(word, limit)
+    /** Real dictionary gloss for [word], for repairing a stored card whose gloss is cross-ref noise. */
+    fun resolvedGloss(word: String) = content.resolvedGloss(word)
 
     /**
      * What to feed the TTS so a *single character* is pronounced with the reading shown on screen.

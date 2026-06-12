@@ -26,8 +26,10 @@ android {
         applicationId = "com.tensen.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        // CI overrides both from the pushed tag (ja-v*) so the built APK's version always matches
+        // its release tag; these are the defaults for local/debug builds. See release.yml.
+        versionCode = (project.findProperty("appVersionCode") as String?)?.toInt() ?: 1
+        versionName = (project.findProperty("appVersionName") as String?) ?: "0.1.0"
         vectorDrawables { useSupportLibrary = true }
     }
     signingConfigs {

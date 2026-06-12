@@ -13,7 +13,6 @@ object WidgetUpdater {
         val app = context.applicationContext
         CoroutineScope(Dispatchers.Default).launch {
             runCatching { StatusWidget().updateAll(app) }
-            runCatching { CharacterWidget().updateAll(app) }
         }
     }
 }
