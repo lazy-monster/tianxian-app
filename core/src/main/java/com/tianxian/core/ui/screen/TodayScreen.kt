@@ -30,7 +30,7 @@ private const val FIRST_NOVEL_TARGET = 1000
 
 @Composable
 fun TodayScreen(graph: AppGraph, onOpenReview: () -> Unit, onOpenLibrary: () -> Unit,
-                onOpenLearn: () -> Unit, onOpenSettings: () -> Unit, onOpenBook: (String) -> Unit,
+                onOpenLearn: () -> Unit, onOpenBook: (String) -> Unit,
                 onOpenChar: (String) -> Unit = {}) {
     val x = Theme.x
     val known by graph.known.knownCountFlow().collectAsStateWithLifecycle(0)
@@ -53,10 +53,7 @@ fun TodayScreen(graph: AppGraph, onOpenReview: () -> Unit, onOpenLibrary: () -> 
 
         item { Spacer(Modifier.height(12.dp)) }
         item {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text("Hall of Cultivation · 今日", color = x.gold, fontSize = 14.sp, modifier = Modifier.weight(1f))
-                Text("⚙", color = x.textSoft, fontSize = 20.sp, modifier = Modifier.clickable { onOpenSettings() })
-            }
+            Text("Hall of Cultivation · 今日", color = x.gold, fontSize = 14.sp)
             Spacer(Modifier.height(8.dp))
             // hero — gold-to-cinnabar wash so the centrepiece glows instead of sitting flat
             Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(26.dp))

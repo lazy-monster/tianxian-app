@@ -16,6 +16,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.tianxian.core.ui.inlineMarkdown
 import com.tianxian.core.ui.theme.Brush
 import com.tianxian.core.ui.theme.SerifSC
 import com.tianxian.core.ui.theme.Theme
@@ -53,7 +54,7 @@ fun Onboarding(appName: String, onFinish: () -> Unit) {
         Text(slide.title, fontFamily = SerifSC, fontWeight = FontWeight.SemiBold, fontSize = 26.sp,
             color = x.text, textAlign = TextAlign.Center)
         Spacer(Modifier.height(14.dp))
-        Text(slide.body, color = x.textSoft, fontSize = 15.sp, lineHeight = 23.sp, textAlign = TextAlign.Center)
+        Text(inlineMarkdown(slide.body), color = x.textSoft, fontSize = 15.sp, lineHeight = 23.sp, textAlign = TextAlign.Center)
         Spacer(Modifier.height(34.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
             slides.indices.forEach { d ->

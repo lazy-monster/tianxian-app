@@ -38,6 +38,7 @@ private val TABS = listOf(
     Tab("read", "Read", Icons.Outlined.MenuBook),
     Tab("review", "Review", Icons.Outlined.Style),
     Tab("dict", "Dict", Icons.Outlined.Search),
+    Tab("settings", "More", Icons.Outlined.Settings),
 )
 
 @Composable
@@ -50,9 +51,9 @@ fun AppRoot(graph: AppGraph, themeId: String, onSetTheme: (String) -> Unit, star
     val current = nav.currentBackStackEntryAsState().value?.destination
     val route = current?.route
     // Keep the tab bar (so Home is always one tap away) on the top-level tabs and on the
-    // Learn sub-screens; hide it only on the immersive full-screen flows.
+    // Learn / Settings sub-screens; hide it only on the immersive full-screen flows.
     val onTab = TABS.any { tab -> current?.hierarchy?.any { it.route == tab.route } == true }
-    val showBar = onTab || route?.startsWith("learn/") == true
+    val showBar = onTab || route?.startsWith("learn/") == true || route?.startsWith("settings/") == true
 
     // Cultivation breakthrough watcher: recompute the rank from review progress (known/mastered)
     // and the study tracks (studyTick), and surface a celebration when it crosses a boundary.
@@ -97,7 +98,8 @@ fun AppRoot(graph: AppGraph, themeId: String, onSetTheme: (String) -> Unit, star
             if (showBar) NavigationBar(containerColor = x.bg2, tonalElevation = 0.dp) {
                 TABS.forEach { tab ->
                     val selected = current?.hierarchy?.any { it.route == tab.route } == true ||
-                        (tab.route == "learn" && route?.startsWith("learn/") == true)
+                        (tab.route == "learn" && route?.startsWith("learn/") == true) ||
+                        (tab.route == "settings" && route?.startsWith("settings/") == true)
                     NavigationBarItem(
                         selected = selected,
                         onClick = {
@@ -127,7 +129,6 @@ fun AppRoot(graph: AppGraph, themeId: String, onSetTheme: (String) -> Unit, star
                     onOpenReview = { nav.navigate("review") },
                     onOpenLibrary = { nav.navigate("read") },
                     onOpenLearn = { nav.navigate("learn") },
-                    onOpenSettings = { nav.navigate("settings") },
                     onOpenBook = { id -> nav.navigate("reader/$id") },
                     onOpenChar = { ch -> nav.navigate("char/$ch") })
             }
@@ -145,7 +146,12 @@ fun AppRoot(graph: AppGraph, themeId: String, onSetTheme: (String) -> Unit, star
             composable("read") { LibraryScreen(graph, onOpenBook = { id -> nav.navigate("reader/$id") }) }
             composable("review") { ReviewScreen(graph, onOpenChar = { ch -> nav.navigate("char/$ch") }) }
             composable("dict") { DictionaryScreen(graph, onOpenChar = { ch -> nav.navigate("char/$ch") }) }
-            composable("settings") { SettingsScreen(graph, themeId, onSetTheme, onBack = { nav.popBackStack() },
+            composable("settings") { SettingsScreen(graph, onOpen = { route -> nav.navigate(route) }) }
+            composable("settings/appearance") { AppearanceSettingsScreen(graph, themeId, onSetTheme, onBack = { nav.popBackStack() }) }
+            composable("settings/study") { StudySettingsScreen(graph, onBack = { nav.popBackStack() }) }
+            composable("settings/backup") { BackupSettingsScreen(graph, onBack = { nav.popBackStack() }) }
+            composable("settings/updates") { UpdatesSettingsScreen(graph, onBack = { nav.popBackStack() }) }
+            composable("settings/about") { AboutSettingsScreen(graph, onBack = { nav.popBackStack() },
                 onOpenGuide = { nav.navigate("guide") }) }
             composable("guide") { GuideScreen(appName = graph.config.appName, onBack = { nav.popBackStack() }) }
 

@@ -34,7 +34,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.shape.CircleShape
 import com.tianxian.core.di.AppGraph
-import com.tianxian.core.update.Update
+import com.tianxian.core.ui.markdownNotes
+import com.tianxian.core.update.UpdateController
 import com.tianxian.core.ui.theme.APP_THEMES
 import com.tianxian.core.ui.theme.SerifSC
 import com.tianxian.core.ui.theme.Theme
@@ -43,88 +44,68 @@ import com.tianxian.core.widget.WidgetUpdater
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
+/**
+ * Settings is a small **hub**: a short, scannable list of categories, each opening its own focused
+ * page (route `settings/<category>`). The previous single endless scroll composed every control at
+ * once — slow, and stressful to navigate. Each spoke below owns only its own slice of state.
+ */
 @Composable
-fun SettingsScreen(graph: AppGraph, themeId: String, onSetTheme: (String) -> Unit, onBack: () -> Unit,
-                   onOpenGuide: () -> Unit = {}) {
+fun SettingsScreen(graph: AppGraph, onOpen: (String) -> Unit) {
+    val x = Theme.x
+    Column(Modifier.fillMaxSize().background(x.bg).verticalScroll(rememberScrollState()).padding(horizontal = 22.dp)) {
+        ScreenHeader("Settings")
+        HubRow("🎨", "Appearance", "Theme, trial sounds, and home-screen widgets") { onOpen("settings/appearance") }
+        Spacer(Modifier.height(12.dp))
+        HubRow("🎴", "Study & review", "Recall target, batch sizes, and daily reminders") { onOpen("settings/study") }
+        Spacer(Modifier.height(12.dp))
+        HubRow("💾", "Backup & restore", "Export, import, automatic backups, and reset") { onOpen("settings/backup") }
+        Spacer(Modifier.height(12.dp))
+        HubRow("⬆", "Updates", "Check for and install new versions") { onOpen("settings/updates") }
+        Spacer(Modifier.height(12.dp))
+        HubRow("📜", "Guide & about", "The recommended path, open data, and credits") { onOpen("settings/about") }
+        Spacer(Modifier.height(30.dp))
+    }
+}
+
+/** One tappable category row on the Settings hub. */
+@Composable
+private fun HubRow(emoji: String, title: String, subtitle: String, onClick: () -> Unit) {
+    val x = Theme.x
+    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(x.surface)
+        .clickable { onClick() }.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(emoji, fontSize = 22.sp)
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            Text(title, color = x.text, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+            Text(subtitle, color = x.textSoft, fontSize = 13.sp, lineHeight = 18.sp)
+        }
+        Text("›", color = x.gold, fontSize = 22.sp)
+    }
+}
+
+/** Shared page scaffold for a settings spoke: themed background, scroll, back header. */
+@Composable
+private fun SettingsPage(title: String, subtitle: String? = null, onBack: () -> Unit,
+                         content: @Composable ColumnScope.() -> Unit) {
+    val x = Theme.x
+    Column(Modifier.fillMaxSize().background(x.bg).verticalScroll(rememberScrollState()).padding(horizontal = 22.dp)) {
+        ScreenHeader(title, subtitle, onBack)
+        content()
+        Spacer(Modifier.height(30.dp))
+    }
+}
+
+/* ── Appearance ─────────────────────────────────────────────────────── */
+@Composable
+fun AppearanceSettingsScreen(graph: AppGraph, themeId: String, onSetTheme: (String) -> Unit, onBack: () -> Unit) {
     val x = Theme.x
     val context = LocalContext.current
     val settings = graph.settings
-    val scope = rememberCoroutineScope()
-
     var soundOn by remember { mutableStateOf(settings.soundEffectsEnabled) }
     var widgetTheme by remember { mutableStateOf(settings.widgetThemeKey) }
-    var retention by remember { mutableStateOf(settings.desiredRetention) }
-    var hskBatch by remember { mutableStateOf(settings.hskBatchSize) }
-    var radicalBatch by remember { mutableStateOf(settings.radicalBatchSize) }
-    var remindersOn by remember { mutableStateOf(settings.remindersEnabled) }
-    var autoBackup by remember { mutableStateOf(settings.autoBackup) }
-    var backupDir by remember { mutableStateOf(settings.backupTreeUri) }
-    var intervalHours by remember { mutableStateOf(settings.backupIntervalHours) }
-    var status by remember { mutableStateOf<String?>(null) }
-    var showReset by remember { mutableStateOf(false) }
 
-    // Notification permission (Android 13+), requested when reminders are switched on.
-    val notifPermLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()) {}
-
-    // Export: write the backup JSON to a file the user picks.
-    val exportLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/json")
-    ) { uri: Uri? ->
-        if (uri != null) scope.launch {
-            status = runCatching { graph.backup.writeTo(uri) }
-                .fold({ "Exported ${it.cards} cards, ${it.known} known characters." },
-                    { "Export failed: ${it.message}" })
-        }
-    }
-    // Import: read and restore a backup the user picks.
-    val importLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocument()
-    ) { uri: Uri? ->
-        if (uri != null) scope.launch {
-            status = runCatching { graph.backup.restoreFrom(uri) }
-                .fold({ "Imported ${it.cards} cards, ${it.known} known characters, ${it.books} books." },
-                    { "Import failed: ${it.message}" })
-            retention = settings.desiredRetention
-        }
-    }
-    // Backup folder: persist read/write access to a chosen directory.
-    val folderLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocumentTree()
-    ) { uri: Uri? ->
-        if (uri != null) {
-            context.contentResolver.takePersistableUriPermission(
-                uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
-            settings.backupTreeUri = uri.toString()
-            backupDir = uri.toString()
-            settings.autoBackup = true
-            autoBackup = true
-            scope.launch {
-                status = runCatching { graph.backup.writeToTree(uri) }
-                    .fold({ "Backup folder set. Saved ${it.cards} cards now." },
-                        { "Folder set, but first backup failed: ${it.message}" })
-            }
-        }
-    }
-
-    Column(Modifier.fillMaxSize().background(x.bg).verticalScroll(rememberScrollState()).padding(horizontal = 22.dp)) {
-        ScreenHeader("Settings", onBack = onBack)
-
-        // ── The handbook ─────────────────────────────────────────────────
-        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(x.surface2)
-            .clickable { onOpenGuide() }.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text("📜 ${graph.config.appName}'s Path · 指南", color = x.text, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
-                Text("The recommended workflow for reading webnovels — what to learn, in what order, and why the sounds matter.",
-                    color = x.textSoft, fontSize = 13.sp, lineHeight = 18.sp)
-            }
-            Text("›", color = x.gold, fontSize = 22.sp)
-        }
-        Spacer(Modifier.height(20.dp))
-
-        // ── Appearance: app skin ─────────────────────────────────────────
-        Text("Appearance", fontFamily = SerifSC, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = x.text)
-        Spacer(Modifier.height(8.dp))
+    SettingsPage("Appearance", onBack = onBack) {
+        // App skin
         Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(x.surface).padding(16.dp)) {
             Text("Theme", color = x.text, fontWeight = FontWeight.Medium, fontSize = 15.sp)
             val current = themeById(themeId)
@@ -155,7 +136,7 @@ fun SettingsScreen(graph: AppGraph, themeId: String, onSetTheme: (String) -> Uni
             }
         }
 
-        // ── Interactive sounds ───────────────────────────────────────────
+        // Interactive sounds
         Spacer(Modifier.height(12.dp))
         Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(x.surface).padding(16.dp),
             verticalAlignment = Alignment.CenterVertically) {
@@ -171,11 +152,11 @@ fun SettingsScreen(graph: AppGraph, themeId: String, onSetTheme: (String) -> Uni
                 uncheckedThumbColor = x.textSoft, uncheckedTrackColor = x.surface2))
         }
 
-        // ── Widget appearance ────────────────────────────────────────────
+        // Widget appearance
         Spacer(Modifier.height(12.dp))
         Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(x.surface).padding(16.dp)) {
-            Text("Home-screen widgets", color = x.text, fontWeight = FontWeight.Medium, fontSize = 15.sp)
-            Text("Skin for the cultivation and character widgets. “Match app” follows your theme above; " +
+            Text("Home-screen widget", color = x.text, fontWeight = FontWeight.Medium, fontSize = 15.sp)
+            Text("Skin for the cultivation widget. “Match app” follows your theme above; " +
                 "pick a fixed skin (e.g. a light one) if your home screen calls for it.",
                 color = x.textSoft, fontSize = 13.sp, lineHeight = 18.sp)
             Spacer(Modifier.height(12.dp))
@@ -197,12 +178,25 @@ fun SettingsScreen(graph: AppGraph, themeId: String, onSetTheme: (String) -> Uni
                 }
             }
         }
-        Spacer(Modifier.height(8.dp))
+    }
+}
 
-        // ── Review difficulty (FSRS desired retention) ───────────────────
-        Spacer(Modifier.height(20.dp))
-        Text("Review", fontFamily = SerifSC, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = x.text)
-        Spacer(Modifier.height(8.dp))
+/* ── Study & review ─────────────────────────────────────────────────── */
+@Composable
+fun StudySettingsScreen(graph: AppGraph, onBack: () -> Unit) {
+    val x = Theme.x
+    val context = LocalContext.current
+    val settings = graph.settings
+    var retention by remember { mutableStateOf(settings.desiredRetention) }
+    var hskBatch by remember { mutableStateOf(settings.hskBatchSize) }
+    var radicalBatch by remember { mutableStateOf(settings.radicalBatchSize) }
+    var remindersOn by remember { mutableStateOf(settings.remindersEnabled) }
+
+    val notifPermLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()) {}
+
+    SettingsPage("Study & review", onBack = onBack) {
+        // Review difficulty (FSRS desired retention)
         Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(x.surface).padding(16.dp)) {
             Text("Target memory strength", color = x.text, fontWeight = FontWeight.Medium, fontSize = 15.sp)
             Text("Higher means shorter gaps and more frequent reviews — safer, but more work. " +
@@ -223,7 +217,7 @@ fun SettingsScreen(graph: AppGraph, themeId: String, onSetTheme: (String) -> Uni
             }
         }
 
-        // ── New-card batch size (HSK "add next N") ───────────────────────
+        // New-card batch size (HSK "add next N")
         Spacer(Modifier.height(12.dp))
         Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(x.surface).padding(16.dp)) {
             Text("New cards per batch", color = x.text, fontWeight = FontWeight.Medium, fontSize = 15.sp)
@@ -245,7 +239,7 @@ fun SettingsScreen(graph: AppGraph, themeId: String, onSetTheme: (String) -> Uni
             }
         }
 
-        // ── Radical trial batch size ─────────────────────────────────────
+        // Radical trial batch size
         Spacer(Modifier.height(12.dp))
         Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(x.surface).padding(16.dp)) {
             Text("Radicals per trial", color = x.text, fontWeight = FontWeight.Medium, fontSize = 15.sp)
@@ -266,7 +260,7 @@ fun SettingsScreen(graph: AppGraph, themeId: String, onSetTheme: (String) -> Uni
             }
         }
 
-        // ── Reminders ────────────────────────────────────────────────────
+        // Reminders
         Spacer(Modifier.height(12.dp))
         Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(x.surface).padding(16.dp),
             verticalAlignment = Alignment.CenterVertically) {
@@ -287,11 +281,59 @@ fun SettingsScreen(graph: AppGraph, themeId: String, onSetTheme: (String) -> Uni
             }, colors = SwitchDefaults.colors(checkedThumbColor = x.gold, checkedTrackColor = x.cinnabarDeep,
                 uncheckedThumbColor = x.textSoft, uncheckedTrackColor = x.surface2))
         }
+    }
+}
 
-        // ── Backup & restore ─────────────────────────────────────────────
-        Spacer(Modifier.height(20.dp))
-        Text("Backup & restore", fontFamily = SerifSC, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = x.text)
-        Spacer(Modifier.height(8.dp))
+/* ── Backup & restore (and reset) ───────────────────────────────────── */
+@Composable
+fun BackupSettingsScreen(graph: AppGraph, onBack: () -> Unit) {
+    val x = Theme.x
+    val context = LocalContext.current
+    val settings = graph.settings
+    val scope = rememberCoroutineScope()
+    var autoBackup by remember { mutableStateOf(settings.autoBackup) }
+    var backupDir by remember { mutableStateOf(settings.backupTreeUri) }
+    var intervalHours by remember { mutableStateOf(settings.backupIntervalHours) }
+    var status by remember { mutableStateOf<String?>(null) }
+    var showReset by remember { mutableStateOf(false) }
+
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri: Uri? ->
+        if (uri != null) scope.launch {
+            status = runCatching { graph.backup.writeTo(uri) }
+                .fold({ "Exported ${it.cards} cards, ${it.known} known characters." },
+                    { "Export failed: ${it.message}" })
+        }
+    }
+    val importLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        if (uri != null) scope.launch {
+            status = runCatching { graph.backup.restoreFrom(uri) }
+                .fold({ "Imported ${it.cards} cards, ${it.known} known characters, ${it.books} books." },
+                    { "Import failed: ${it.message}" })
+        }
+    }
+    val folderLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            context.contentResolver.takePersistableUriPermission(
+                uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+            settings.backupTreeUri = uri.toString()
+            backupDir = uri.toString()
+            settings.autoBackup = true
+            autoBackup = true
+            scope.launch {
+                status = runCatching { graph.backup.writeToTree(uri) }
+                    .fold({ "Backup folder set. Saved ${it.cards} cards now." },
+                        { "Folder set, but first backup failed: ${it.message}" })
+            }
+        }
+    }
+
+    SettingsPage("Backup & restore", onBack = onBack) {
         Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(x.surface).padding(16.dp)) {
             Text("Your progress — every card, review, known character and book — exports to one " +
                 "portable JSON file. Move it to a new phone and import to pick up exactly where you left off.",
@@ -356,7 +398,7 @@ fun SettingsScreen(graph: AppGraph, themeId: String, onSetTheme: (String) -> Uni
             }
         }
 
-        // ── Reset progress ───────────────────────────────────────────────
+        // Reset progress — kept with the data-management tools.
         Spacer(Modifier.height(20.dp))
         Text("Reset", fontFamily = SerifSC, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = x.text)
         Spacer(Modifier.height(8.dp))
@@ -367,20 +409,6 @@ fun SettingsScreen(graph: AppGraph, themeId: String, onSetTheme: (String) -> Uni
             Spacer(Modifier.height(14.dp))
             SettingButton("Reset progress…", x.surface2) { showReset = true }
         }
-
-        // ── Updates ──────────────────────────────────────────────────────
-        UpdatesSection(graph)
-
-        // ── About ────────────────────────────────────────────────────────
-        Spacer(Modifier.height(20.dp))
-        Text("About", fontFamily = SerifSC, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = x.text)
-        Spacer(Modifier.height(8.dp))
-        AboutCard(graph.config.appName, "A free, offline-first app for learning to read Chinese web novels — pinyin first, characters by their components, frequency-ordered vocabulary, spaced repetition, and a friction-free reader.")
-        Spacer(Modifier.height(10.dp))
-        AboutCard("Open data", "Dictionary: CC-CEDICT (CC BY-SA). Characters & strokes: Make Me a Hanzi (Arphic). Levels: complete-hsk-vocabulary (MIT). Frequency: wordfreq (MIT). Example sentences: Tatoeba (CC BY 2.0 FR). The 214 radicals are curated reference data.")
-        Spacer(Modifier.height(10.dp))
-        AboutCard("Your data stays yours", "No account, no ads, no tracking. Your progress and imported books live only on this device — back them up above whenever you like.")
-        Spacer(Modifier.height(30.dp))
     }
 
     if (showReset) {
@@ -421,74 +449,87 @@ fun SettingsScreen(graph: AppGraph, themeId: String, onSetTheme: (String) -> Uni
     }
 }
 
+/* ── Updates ────────────────────────────────────────────────────────── */
+@Composable
+fun UpdatesSettingsScreen(graph: AppGraph, onBack: () -> Unit) {
+    SettingsPage("Updates", onBack = onBack) { UpdatesSection(graph) }
+}
+
+/* ── Guide & about ──────────────────────────────────────────────────── */
+@Composable
+fun AboutSettingsScreen(graph: AppGraph, onBack: () -> Unit, onOpenGuide: () -> Unit) {
+    val x = Theme.x
+    SettingsPage("Guide & about", onBack = onBack) {
+        // The handbook — the most useful thing here, so it leads.
+        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(x.surface2)
+            .clickable { onOpenGuide() }.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("📜 ${graph.config.appName}'s Path · 指南", color = x.text, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                Text("The recommended workflow for reading webnovels — what to learn, in what order, and why the sounds matter.",
+                    color = x.textSoft, fontSize = 13.sp, lineHeight = 18.sp)
+            }
+            Text("›", color = x.gold, fontSize = 22.sp)
+        }
+        Spacer(Modifier.height(20.dp))
+        AboutCard(graph.config.appName, "A free, offline-first app for learning to read Chinese web novels — pinyin first, characters by their components, frequency-ordered vocabulary, spaced repetition, and a friction-free reader.")
+        Spacer(Modifier.height(10.dp))
+        AboutCard("Open data", "Dictionary: CC-CEDICT (CC BY-SA). Characters & strokes: Make Me a Hanzi (Arphic). Levels: complete-hsk-vocabulary (MIT). Frequency: wordfreq (MIT). Example sentences: Tatoeba (CC BY 2.0 FR). The 214 radicals are curated reference data.")
+        Spacer(Modifier.height(10.dp))
+        AboutCard("Your data stays yours", "No account, no ads, no tracking. Your progress and imported books live only on this device — back them up in Backup & restore whenever you like.")
+    }
+}
+
 /** Check GitHub for a newer release and install it in place — the app is sideloaded, so there's
     no store to do this. Networking happens only when the user taps "Check for updates". */
 @Composable
 private fun UpdatesSection(graph: AppGraph) {
     val x = Theme.x
-    val scope = rememberCoroutineScope()
-    val installed = remember { graph.updater.current() }
+    // State lives in the app-scoped UpdateController, not in this composable, so a download keeps
+    // running (and its progress stays on screen) when the user navigates away and back.
+    val controller = graph.updateController
+    val phase by controller.phase.collectAsState()
+    val msg by controller.message.collectAsState()
+    val installed = remember { controller.installed }
 
-    var checking by remember { mutableStateOf(false) }
-    var update by remember { mutableStateOf<Update?>(null) }
-    var progress by remember { mutableStateOf<Int?>(null) }   // non-null while downloading
-    var msg by remember { mutableStateOf<String?>(null) }
-
-    fun startDownload(u: Update) {
-        if (!graph.updater.canInstall()) {
-            graph.updater.requestInstallPermission()
-            msg = "Allow ${graph.config.appName} to install apps, then tap Update again."
-            return
-        }
-        progress = 0; msg = null
-        scope.launch {
-            runCatching { graph.updater.install(graph.updater.download(u) { progress = it }) }
-                .onSuccess { msg = "Opening the installer…" }
-                .onFailure { msg = "Download failed: ${it.message}" }
-            progress = null
-        }
+    // The update being offered or downloaded, if any — its banner shows in both phases.
+    val offered = when (val p = phase) {
+        is UpdateController.Phase.Available -> p.update
+        is UpdateController.Phase.Downloading -> p.update
+        else -> null
     }
 
-    Spacer(Modifier.height(20.dp))
-    Text("Updates", fontFamily = SerifSC, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = x.text)
-    Spacer(Modifier.height(8.dp))
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(x.surface).padding(16.dp)) {
         Text("Installed version ${installed.first}", color = x.textSoft, fontSize = 14.sp)
 
-        val u = update
-        if (u != null) {
+        if (offered != null) {
             Spacer(Modifier.height(10.dp))
-            Text("Version ${u.versionName} is available", color = x.gold,
+            Text("Version ${offered.versionName} is available", color = x.gold,
                 fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-            if (u.notes.isNotBlank()) {
+            if (offered.notes.isNotBlank()) {
                 Spacer(Modifier.height(4.dp))
-                Text(u.notes, color = x.textSoft, fontSize = 13.sp, lineHeight = 19.sp, maxLines = 8)
+                Text(markdownNotes(offered.notes), color = x.textSoft, fontSize = 13.sp, lineHeight = 19.sp, maxLines = 8)
             }
         }
 
         Spacer(Modifier.height(12.dp))
-        val downloading = progress != null
-        if (downloading) {
-            LinearProgressIndicator(progress = { (progress ?: 0) / 100f },
-                modifier = Modifier.fillMaxWidth(), color = x.jade, trackColor = x.surface2)
-            Spacer(Modifier.height(6.dp))
-            Text("Downloading ${progress ?: 0}%…", color = x.textSoft, fontSize = 12.sp)
-        } else if (u != null) {
-            SettingButton("Update to ${u.versionName}", x.jade) { startDownload(u) }
-        } else {
-            SettingButton(if (checking) "Checking…" else "Check for updates", x.surface2) {
-                if (checking) return@SettingButton
-                checking = true; msg = null
-                scope.launch {
-                    runCatching { graph.updater.check() }
-                        .onSuccess { found ->
-                            update = found
-                            if (found == null) msg = "You're on the latest version (${installed.first})."
-                        }
-                        .onFailure { msg = "Couldn't check for updates: ${it.message}" }
-                    checking = false
-                }
+        when (val p = phase) {
+            is UpdateController.Phase.Downloading -> {
+                LinearProgressIndicator(progress = { p.percent / 100f },
+                    modifier = Modifier.fillMaxWidth(), color = x.jade, trackColor = x.surface2)
+                Spacer(Modifier.height(6.dp))
+                Text("Downloading ${p.percent}%…", color = x.textSoft, fontSize = 12.sp)
             }
+            is UpdateController.Phase.Installing -> {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), color = x.jade, trackColor = x.surface2)
+                Spacer(Modifier.height(6.dp))
+                Text("Opening the installer…", color = x.textSoft, fontSize = 12.sp)
+            }
+            is UpdateController.Phase.Available ->
+                SettingButton("Update to ${p.update.versionName}", x.jade) { controller.download(p.update) }
+            UpdateController.Phase.Checking ->
+                SettingButton("Checking…", x.surface2) {}
+            UpdateController.Phase.Idle ->
+                SettingButton("Check for updates", x.surface2) { controller.check() }
         }
 
         msg?.let {
@@ -511,8 +552,8 @@ private fun SettingButton(label: String, bg: Color, modifier: Modifier = Modifie
 private fun AboutCard(title: String, body: String) {
     val x = Theme.x
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(x.surface).padding(16.dp)) {
-        Text(title, color = x.gold, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+        Text(title, color = x.text, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
         Spacer(Modifier.height(4.dp))
-        Text(body, color = x.textSoft, fontSize = 14.sp, lineHeight = 21.sp)
+        Text(body, color = x.textSoft, fontSize = 13.sp, lineHeight = 19.sp)
     }
 }

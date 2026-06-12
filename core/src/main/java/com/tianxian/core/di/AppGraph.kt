@@ -13,6 +13,7 @@ import com.tianxian.core.data.repo.KnownRepository
 import com.tianxian.core.data.segment.MaxMatchSegmenter
 import com.tianxian.core.data.user.UserDatabase
 import com.tianxian.core.reader.ingest.Ingestor
+import com.tianxian.core.update.UpdateController
 import com.tianxian.core.update.Updater
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -50,6 +51,9 @@ class AppGraph(context: Context, val config: AppConfig) {
 
     /** Checks GitHub Releases and installs the APK — in-app self-update for the sideloaded build. */
     val updater by lazy { Updater(app, config) }
+
+    /** App-scoped update flow state, so a download survives the user leaving the Settings screen. */
+    val updateController by lazy { UpdateController(updater, appScope, config.appName) }
 
     /** Short interactive trial cues, gated by the user's sound-effects setting. */
     val soundFx by lazy { SoundFx { settings.soundEffectsEnabled } }

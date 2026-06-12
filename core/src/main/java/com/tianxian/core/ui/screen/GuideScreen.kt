@@ -12,6 +12,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.tianxian.core.ui.inlineMarkdown
 import com.tianxian.core.ui.theme.SerifSC
 import com.tianxian.core.ui.theme.Theme
 import com.tianxian.core.ui.theme.heroWash
@@ -38,6 +39,7 @@ fun GuideScreen(appName: String, onBack: () -> Unit) {
                     fontWeight = FontWeight.SemiBold, fontSize = 17.sp, color = x.text)
                 Spacer(Modifier.height(8.dp))
                 Text(
+                    inlineMarkdown(
                     "Learn the sound *with* the meaning — but only to recognition level. You never need " +
                     "perfect pronunciation to read. You do need to know roughly how a character sounds, " +
                     "for three reasons:\n\n" +
@@ -51,7 +53,7 @@ fun GuideScreen(appName: String, onBack: () -> Unit) {
                     "silently hit a wall: every sentence stays a decoding puzzle instead of becoming speech.\n\n" +
                     "So: when a trial plays a word, listen — that's the whole investment. Don't drill " +
                     "tone production, don't do pronunciation exercises, don't let sound-perfectionism " +
-                    "slow your vocabulary down. Hear it, recognise it, move on.",
+                    "slow your vocabulary down. Hear it, recognise it, move on."),
                     color = x.textSoft, fontSize = 14.sp, lineHeight = 21.sp)
             }
         }
@@ -129,6 +131,6 @@ private fun GuideSection(title: String, accent: Color, body: String) {
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(x.surface).padding(18.dp)) {
         Text(title, fontFamily = SerifSC, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = accent)
         Spacer(Modifier.height(8.dp))
-        Text(body, color = x.textSoft, fontSize = 14.sp, lineHeight = 21.sp)
+        Text(inlineMarkdown(body), color = x.textSoft, fontSize = 14.sp, lineHeight = 21.sp)
     }
 }
